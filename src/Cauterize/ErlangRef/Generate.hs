@@ -78,7 +78,7 @@ typeDescToString :: S.TypeDesc -> String
 typeDescToString d =
   case d of
     S.Synonym { S.synonymRef = r }
-      -> [i|{ #{ident2str r} }|]
+      -> [i|#{ident2str r}|]
     S.Range { S.rangeOffset = ro, S.rangeLength = rl, S.rangeTag = rt, S.rangePrim = rp }
       -> [i|{ #{ro}, #{rl}, #{tag2str rt}, #{prim2str rp} }|]
     S.Array { S.arrayRef = r, S.arrayLength = al }
