@@ -1,0 +1,51 @@
+name:                caut-erl-ref
+version:             0.1.0.0
+synopsis:            Initial project template from stack
+description:         Please see README.md
+homepage:            http://github.com/sw17ch/caut-erl-ref#readme
+license:             BSD3
+license-file:        LICENSE
+author:              John Van Enk
+maintainer:          sw17ch@gmail.com
+copyright:           2016 Author Here
+category:            Web
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Cauterize.ErlangRef.Generate
+  build-depends:       base >= 4.7 && < 5
+                     , cauterize >= 0.1.0.0
+                     , text
+                     , interpolate
+  default-language:    Haskell2010
+
+executable caut-erl-ref
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  other-modules:       Cauterize.ErlangRef.Options
+  build-depends:       base
+                     , caut-erl-ref
+                     , cauterize >= 0.1.0.0
+                     , optparse-applicative
+                     , directory
+                     , filepath
+                     , text
+                     , bytestring
+  default-language:    Haskell2010
+
+test-suite caut-erl-ref-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , caut-erl-ref
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/sw17ch/caut-erl-ref
