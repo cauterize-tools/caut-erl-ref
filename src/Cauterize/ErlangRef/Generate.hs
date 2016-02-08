@@ -79,8 +79,8 @@ typeDescToString d =
   case d of
     S.Synonym { S.synonymRef = r }
       -> [i|#{ident2str r}|]
-    S.Range { S.rangeOffset = ro, S.rangeLength = rl, S.rangeTag = rt, S.rangePrim = rp }
-      -> [i|{ #{ro}, #{rl}, #{tag2str rt}, #{prim2str rp} }|]
+    S.Range { S.rangeOffset = ro, S.rangeLength = rl, S.rangeTag = rt }
+      -> [i|{ #{ro}, #{rl}, #{tag2str rt} }|]
     S.Array { S.arrayRef = r, S.arrayLength = al }
       -> [i|{ #{ident2str r}, #{al} }|]
     S.Vector { S.vectorRef = r, S.vectorLength = vl, S.vectorTag = vt }
