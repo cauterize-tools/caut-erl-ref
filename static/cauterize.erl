@@ -54,12 +54,20 @@ decode_internal(Bin, union, {Tag, InstFields}, Spec) ->
             {{FieldName, Value}, FinalRem};
         {empty, FieldName, Index} ->
             {FieldName, Rem}
-    end.
+    end;
 
-
-
-
-
+decode_internal(Bin, combination, {Tag, InstFields}, Spec) ->
+    {Flags,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    FieldCount = length(InstFields),
+    BitFlags = lists:reverse([ X || <<X:1>> <= <<Flags:FieldCount/integer-unsigned-little>> ]),
+    {FinalRem, Values} = lists:foldl(fun({1, {empty, FieldName, _}}, {FoldBin,Acc}) ->
+                                             {FoldBin, [FieldName|Acc]};
+                                        ({1, {data, FieldName, _, RefName}}, {FoldBin,Acc}) ->
+                                             {Value, NextRem} = decode(FoldBin, RefName, Spec),
+                                             {NextRem, [{FieldName, Value}|Acc]};
+                                        ({0, _}, Acc) -> Acc
+                                     end, {Rem, []}, lists:zip(BitFlags, InstFields)),
+    {lists:reverse(Values), FinalRem}.
 
 encode({instance, primitive, u8, Value}, _Spec) ->
     <<Value:8/integer-unsigned-little>>;
