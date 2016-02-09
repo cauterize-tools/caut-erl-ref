@@ -120,17 +120,17 @@ encode({instance, record, Name, InstFields}, Spec) ->
                 end, [], DescFields),
     lists:reverse(RecData);
 
-encode({instance, union, Name, FieldName}, Spec) ->
-    {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, Spec),
-    {empty, FieldName, Index} = lists:keyfind(FieldName, 2, Fields),
-    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
-
-encode({instance, union, Name, FieldName, Value}, Spec) ->
+encode({instance, union, Name, {FieldName, Value}}, Spec) when is_atom(FieldName) ->
     {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, Spec),
     {data, FieldName, Index, RefName} = lists:keyfind(FieldName, 2, Fields),
     {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
     [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec),
      encode({instance, Prototype, RefName, Value}, Spec)];
+
+encode({instance, union, Name, FieldName}, Spec) when is_atom(FieldName) ->
+    {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, Spec),
+    {empty, FieldName, Index} = lists:keyfind(FieldName, 2, Fields),
+    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
 
 encode({instance, combination, Name, InstFields}, Spec) ->
     {descriptor, combination, Name, {Tag, DescFields}} = lookup_type(Name, Spec),
