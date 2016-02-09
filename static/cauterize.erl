@@ -1,8 +1,50 @@
 -module(cauterize).
--export([decode/2, encode/2]).
+-export([decode/3, encode/2]).
 
-decode(_, _) ->
-     ok.
+decode(<<Val:8/integer-unsigned-little,Rem/binary>>, u8, _Spec) -> {Val,Rem};
+decode(<<Val:16/integer-unsigned-little,Rem/binary>>, u16, _Spec) -> {Val,Rem};
+decode(<<Val:32/integer-unsigned-little,Rem/binary>>, u32, _Spec) -> {Val,Rem};
+decode(<<Val:64/integer-unsigned-little,Rem/binary>>, u64, _Spec) -> {Val,Rem};
+decode(<<Val:8/integer-signed-little,Rem/binary>>, s8, _Spec) -> {Val,Rem};
+decode(<<Val:16/integer-signed-little,Rem/binary>>, s16, _Spec) -> {Val,Rem};
+decode(<<Val:32/integer-signed-little,Rem/binary>>, s32, _Spec) -> {Val,Rem};
+decode(<<Val:64/integer-signed-little,Rem/binary>>, s64, _Spec) -> {Val,Rem};
+decode(<<1:8/integer-unsigned-little,Rem/binary>>, bool, _Spec) -> {true,Rem};
+decode(<<0:8/integer-unsigned-little,Rem/binary>>, bool, _Spec) -> {false,Rem};
+
+decode(Bin, Name, Spec) ->
+    {descriptor, Prototype, Name, Desc} = lookup_type(Name, Spec),
+    decode_internal(Bin, Prototype, Name, Desc, Spec).
+
+
+decode_internal(Bin, synonym, Name, RefName, Spec) -> decode(Bin, RefName, Spec);
+decode_internal(Bin, vector, Name, {RefName, MaxLen, Tag}, Spec) ->
+    {Length, Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    true = Length =< MaxLen,
+    {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
+                        {Val, NextRem} = decode(FoldRem, RefName, Spec),
+                        {NextRem, [Val|Acc]}
+                end, {Rem, []}, lists:seq(0, Length - 1)),
+    {lists:reverse(Vals), FinalRem};
+decode_internal(Bin, array, Name, {RefName, Length}, Spec) ->
+    {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
+                        {Val, NextRem} = decode(FoldRem, RefName, Spec),
+                        {NextRem, [Val|Acc]}
+                end, {Bin, []}, lists:seq(0, Length - 1)),
+    {lists:reverse(Vals), FinalRem};
+decode_internal(Bin, range, Name, {Offset, Length, Tag}, Spec) ->
+    {Value,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    true = Value =< Length,
+    {Value + Offset, Rem};
+decode_internal(Bin, enumeration, Name, {Tag, States}, Spec) ->
+    {Index,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    {Value, Index} = lists:keyfind(Index, 2, States),
+    {Value, Rem}.
+
+encode({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
+    {descriptor, enumeration, Name, {Tag, States}} = lookup_type(Name, Spec),
+    {Value, Index} = lists:keyfind(Value, 1, States),
+    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
 
 encode({instance, primitive, u8, Value}, _Spec) ->
     <<Value:8/integer-unsigned-little>>;

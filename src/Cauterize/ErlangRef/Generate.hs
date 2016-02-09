@@ -14,7 +14,7 @@ import Data.String.Interpolate.Util
 erlFileFromSpec :: S.Specification -> String
 erlFileFromSpec s = unindent [i|
 -module(#{ln}).
--export([decode/1, encode/1]).
+-export([decode/2, encode/1]).
 
 %% specification for Cauterize schema #{ln}
 
@@ -22,8 +22,8 @@ erlFileFromSpec s = unindent [i|
 #{descriptorList}
 ]).
 
-decode(Bin) ->
-  cauterize:decode(Bin, ?CAUT_SPEC_#{ln}).
+decode(Bin, Which) ->
+  cauterize:decode(Bin, Which, ?CAUT_SPEC_#{ln}).
 encode(Inst) ->
   cauterize:encode(Inst, ?CAUT_SPEC_#{ln}).
 |]
