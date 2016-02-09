@@ -14,11 +14,11 @@ decode(<<0:8/integer-unsigned-little,Rem/binary>>, bool, _Spec) -> {false,Rem};
 
 decode(Bin, Name, Spec) ->
     {descriptor, Prototype, Name, Desc} = lookup_type(Name, Spec),
-    decode_internal(Bin, Prototype, Name, Desc, Spec).
+    decode_internal(Bin, Prototype, Desc, Spec).
 
 
-decode_internal(Bin, synonym, Name, RefName, Spec) -> decode(Bin, RefName, Spec);
-decode_internal(Bin, vector, Name, {RefName, MaxLen, Tag}, Spec) ->
+decode_internal(Bin, synonym, RefName, Spec) -> decode(Bin, RefName, Spec);
+decode_internal(Bin, vector, {RefName, MaxLen, Tag}, Spec) ->
     {Length, Rem} = decode(Bin, tag_to_prim(Tag), Spec),
     true = Length =< MaxLen,
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
@@ -26,20 +26,26 @@ decode_internal(Bin, vector, Name, {RefName, MaxLen, Tag}, Spec) ->
                         {NextRem, [Val|Acc]}
                 end, {Rem, []}, lists:seq(0, Length - 1)),
     {lists:reverse(Vals), FinalRem};
-decode_internal(Bin, array, Name, {RefName, Length}, Spec) ->
+decode_internal(Bin, array, {RefName, Length}, Spec) ->
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
                         {Val, NextRem} = decode(FoldRem, RefName, Spec),
                         {NextRem, [Val|Acc]}
                 end, {Bin, []}, lists:seq(0, Length - 1)),
     {lists:reverse(Vals), FinalRem};
-decode_internal(Bin, range, Name, {Offset, Length, Tag}, Spec) ->
+decode_internal(Bin, range, {Offset, Length, Tag}, Spec) ->
     {Value,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
     true = Value =< Length,
     {Value + Offset, Rem};
-decode_internal(Bin, enumeration, Name, {Tag, States}, Spec) ->
+decode_internal(Bin, enumeration, {Tag, States}, Spec) ->
     {Index,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
     {Value, Index} = lists:keyfind(Index, 2, States),
-    {Value, Rem}.
+    {Value, Rem};
+decode_internal(Bin, record, InstFields, Spec) ->
+    {FinalBin, Vals} = lists:foldl(fun({data, FieldName, _, RefName}, {FoldBin, Acc}) ->
+                                           {Val,NextRem} = decode(FoldBin, RefName, Spec),
+                                           {NextRem,[{FieldName, Val}|Acc]}
+                                   end, {Bin, []}, InstFields),
+    {lists:reverse(Vals), FinalBin}.
 
 encode({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
     {descriptor, enumeration, Name, {Tag, States}} = lookup_type(Name, Spec),
