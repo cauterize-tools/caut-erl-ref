@@ -61,8 +61,19 @@ encode({instance, record, Name, InstFields}, Spec) ->
                         {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
                         [encode({instance, Prototype, RefName, Value}, Spec)|Accum]
                 end, [], DescFields),
-    lists:reverse(RecData).
+    lists:reverse(RecData);
 
+encode({instance, union, Name, FieldName}, Spec) ->
+    {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, Spec),
+    {empty, FieldName, Index} = lists:keyfind(FieldName, 2, Fields),
+    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
+
+encode({instance, union, Name, FieldName, Value}, Spec) ->
+    {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, Spec),
+    {data, FieldName, Index, RefName} = lists:keyfind(FieldName, 2, Fields),
+    {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
+    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec),
+     encode({instance, Prototype, RefName, Value}, Spec)].
 
 tag_to_prim(tag8) -> u8;
 tag_to_prim(tag16) -> u16;
