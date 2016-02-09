@@ -45,12 +45,21 @@ decode_internal(Bin, record, InstFields, Spec) ->
                                            {Val,NextRem} = decode(FoldBin, RefName, Spec),
                                            {NextRem,[{FieldName, Val}|Acc]}
                                    end, {Bin, []}, InstFields),
-    {lists:reverse(Vals), FinalBin}.
+    {lists:reverse(Vals), FinalBin};
+decode_internal(Bin, union, {Tag, InstFields}, Spec) ->
+    {Index,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    case lists:keyfind(Index, 3, InstFields) of
+        {data, FieldName, Index, RefName} ->
+            {Value, FinalRem} = decode(Rem, RefName, Spec),
+            {{FieldName, Value}, FinalRem};
+        {empty, FieldName, Index} ->
+            {FieldName, Rem}
+    end.
 
-encode({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
-    {descriptor, enumeration, Name, {Tag, States}} = lookup_type(Name, Spec),
-    {Value, Index} = lists:keyfind(Value, 1, States),
-    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
+
+
+
+
 
 encode({instance, primitive, u8, Value}, _Spec) ->
     <<Value:8/integer-unsigned-little>>;
