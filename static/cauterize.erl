@@ -56,10 +56,10 @@ encode({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
 
 encode({instance, record, Name, InstFields}, Spec) ->
     {descriptor, record, Name, DescFields} = lookup_type(Name, Spec),
-    RecData = lists:foldl(fun({ data, FieldName, _, RefName}, Accum) ->
-                        {FieldName, Value} = lists:keyfind(FieldName, 1, InstFields),
-                        {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
-                        [encode({instance, Prototype, RefName, Value}, Spec)|Accum]
+    RecData = lists:foldl(fun({data, FieldName, _, RefName}, Acc) ->
+                                  {FieldName, Value} = lists:keyfind(FieldName, 1, InstFields),
+                                  {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
+                                  [encode({instance, Prototype, RefName, Value}, Spec)|Acc]
                 end, [], DescFields),
     lists:reverse(RecData);
 
@@ -73,7 +73,25 @@ encode({instance, union, Name, FieldName, Value}, Spec) ->
     {data, FieldName, Index, RefName} = lists:keyfind(FieldName, 2, Fields),
     {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
     [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec),
-     encode({instance, Prototype, RefName, Value}, Spec)].
+     encode({instance, Prototype, RefName, Value}, Spec)];
+
+encode({instance, combination, Name, InstFields}, Spec) ->
+    {descriptor, combination, Name, {Tag, DescFields}} = lookup_type(Name, Spec),
+    {BitTag,RecData} = lists:foldl(fun({data, FieldName, Index, RefName}, {BitField,Acc}) ->
+                                           case lists:keyfind(FieldName, 1, InstFields) of
+                                               {FieldName, Value} ->
+                                                   {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
+                                                   {BitField bor (1 bsl Index),
+                                                    [encode({instance, Prototype, RefName, Value}, Spec)|Acc]};
+                                               false -> {BitField, Acc}
+                                           end;
+                                      ({empty, FieldName, Index}, {BitField,Acc}) ->
+                                           case lists:member(FieldName, InstFields) of
+                                               true -> {BitField bor (1 bsl Index), Acc};
+                                               false -> {BitField, Acc}
+                                           end
+                                   end, {0,[]}, DescFields),
+    [encode({instance, primitive, tag_to_prim(Tag), BitTag},Spec)|lists:reverse(RecData)].
 
 tag_to_prim(tag8) -> u8;
 tag_to_prim(tag16) -> u16;
