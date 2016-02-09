@@ -52,7 +52,16 @@ encode({instance, range, Name, Value}, Spec) when is_integer(Value) ->
 encode({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
     {descriptor, enumeration, Name, {Tag, States}} = lookup_type(Name, Spec),
     {Value, Index} = lists:keyfind(Value, 1, States),
-    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)].
+    [encode({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
+
+encode({instance, record, Name, InstFields}, Spec) ->
+    {descriptor, record, Name, DescFields} = lookup_type(Name, Spec),
+    RecData = lists:foldl(fun({ data, FieldName, _, RefName}, Accum) ->
+                        {FieldName, Value} = lists:keyfind(FieldName, 1, InstFields),
+                        {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
+                        [encode({instance, Prototype, RefName, Value}, Spec)|Accum]
+                end, [], DescFields),
+    lists:reverse(RecData).
 
 
 tag_to_prim(tag8) -> u8;

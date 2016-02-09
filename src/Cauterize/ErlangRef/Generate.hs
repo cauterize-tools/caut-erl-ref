@@ -91,7 +91,7 @@ typeDescToString d =
          in [i|{ #{tag2str et}, [#{evsStr}] }|]
     S.Record { S.recordFields = rs }
       -> let fieldsStr = intercalate ", " $ map f2str rs
-         in [i|{ [#{fieldsStr}] }|]
+         in [i|[#{fieldsStr}]|]
     S.Combination { S.combinationFields = cf, S.combinationTag = ct }
       -> let fieldsStr = intercalate ", " $ map f2str cf
          in [i|{ #{tag2str ct}, [#{fieldsStr}] }|]
