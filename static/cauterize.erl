@@ -1,6 +1,7 @@
 -module(cauterize).
 -export([decode/3, encode/2]).
 
+
 decode(Bin, Name, Spec) ->
     {descriptor, Prototype, Name, Desc} = lookup_type(Name, Spec),
     {Decoded,Rem} = decode_internal(Bin, Prototype, Desc, Spec),
@@ -16,6 +17,15 @@ decode_internal(<<Val:32/integer-signed-little,Rem/binary>>, primitive, s32, _Sp
 decode_internal(<<Val:64/integer-signed-little,Rem/binary>>, primitive, s64, _Spec) -> {Val,Rem};
 decode_internal(<<1:8/integer-unsigned-little,Rem/binary>>, primitive, bool, _Spec) -> {true,Rem};
 decode_internal(<<0:8/integer-unsigned-little,Rem/binary>>, primitive, bool, _Spec) -> {false,Rem};
+
+decode_internal(<<0,0,128,127,Rem/binary>>, primitive, f32, _Spec) -> {pos_inf,Rem};
+decode_internal(<<0,0,128,255,Rem/binary>>, primitive, f32, _Spec) -> {neg_inf,Rem};
+decode_internal(<<0,0,192,255,Rem/binary>>, primitive, f32, _Spec) -> {nan,Rem};
+decode_internal(<<Value:32/float-unsigned-little,Rem/binary>>, primitive, f32, _Spec) -> {Value,Rem};
+decode_internal(<<0,0,0,0,0,0,240,127,Rem/binary>>, primitive, f64, _Spec) -> {pos_inf,Rem};
+decode_internal(<<0,0,0,0,0,0,240,255,Rem/binary>>, primitive, f64, _Spec) -> {neg_inf,Rem};
+decode_internal(<<0,0,0,0,0,0,248,255,Rem/binary>>, primitive, f64, _Spec) -> {nan,Rem};
+decode_internal(<<Value:64/float-unsigned-little,Rem/binary>>, primitive, f64, _Spec) -> {Value,Rem};
 
 decode_internal(Bin, synonym, RefName, Spec) ->
     {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
@@ -97,6 +107,14 @@ encode({instance, primitive, bool, true}, _Spec) ->
     <<1:8/integer-unsigned-little>>;
 encode({instance, primitive, bool, false}, _Spec) ->
     <<0:8/integer-unsigned-little>>;
+encode({instance, primitive, f32, pos_inf}, _Spec) -> <<0,0,128,127>>;
+encode({instance, primitive, f32, neg_inf}, _Spec) -> <<0,0,128,255>>;
+encode({instance, primitive, f32, nan}, _Spec) -> <<0,0,192,255>>;
+encode({instance, primitive, f32, Value}, _Spec) -> <<Value:32/float-signed-little>>;
+encode({instance, primitive, f64, pos_inf}, _Spec) -> <<0,0,0,0,0,0,240,127>>;
+encode({instance, primitive, f64, neg_inf}, _Spec) -> <<0,0,0,0,0,0,240,255>>;
+encode({instance, primitive, f64, nan}, _Spec) -> <<0,0,0,0,0,0,248,255>>;
+encode({instance, primitive, f64, Value}, _Spec) -> <<Value:64/float-signed-little>>;
 
 encode({instance, synonym, Name, Value}, Spec) ->
     {descriptor, synonym, Name, RefName} = lookup_type(Name, Spec),
