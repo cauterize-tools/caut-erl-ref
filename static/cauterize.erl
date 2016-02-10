@@ -1,69 +1,77 @@
 -module(cauterize).
 -export([decode/3, encode/2]).
 
-decode(<<Val:8/integer-unsigned-little,Rem/binary>>, u8, _Spec) -> {Val,Rem};
-decode(<<Val:16/integer-unsigned-little,Rem/binary>>, u16, _Spec) -> {Val,Rem};
-decode(<<Val:32/integer-unsigned-little,Rem/binary>>, u32, _Spec) -> {Val,Rem};
-decode(<<Val:64/integer-unsigned-little,Rem/binary>>, u64, _Spec) -> {Val,Rem};
-decode(<<Val:8/integer-signed-little,Rem/binary>>, s8, _Spec) -> {Val,Rem};
-decode(<<Val:16/integer-signed-little,Rem/binary>>, s16, _Spec) -> {Val,Rem};
-decode(<<Val:32/integer-signed-little,Rem/binary>>, s32, _Spec) -> {Val,Rem};
-decode(<<Val:64/integer-signed-little,Rem/binary>>, s64, _Spec) -> {Val,Rem};
-decode(<<1:8/integer-unsigned-little,Rem/binary>>, bool, _Spec) -> {true,Rem};
-decode(<<0:8/integer-unsigned-little,Rem/binary>>, bool, _Spec) -> {false,Rem};
-
 decode(Bin, Name, Spec) ->
     {descriptor, Prototype, Name, Desc} = lookup_type(Name, Spec),
-    decode_internal(Bin, Prototype, Desc, Spec).
+    {Decoded,Rem} = decode_internal(Bin, Prototype, Desc, Spec),
+    {{instance, Prototype, Name, Decoded}, Rem}.
 
+decode_internal(<<Val:8/integer-unsigned-little,Rem/binary>>, primitive, u8, _Spec) -> {Val,Rem};
+decode_internal(<<Val:16/integer-unsigned-little,Rem/binary>>, primitive, u16, _Spec) -> {Val,Rem};
+decode_internal(<<Val:32/integer-unsigned-little,Rem/binary>>, primitive, u32, _Spec) -> {Val,Rem};
+decode_internal(<<Val:64/integer-unsigned-little,Rem/binary>>, primitive, u64, _Spec) -> {Val,Rem};
+decode_internal(<<Val:8/integer-signed-little,Rem/binary>>, primitive, s8, _Spec) -> {Val,Rem};
+decode_internal(<<Val:16/integer-signed-little,Rem/binary>>, primitive, s16, _Spec) -> {Val,Rem};
+decode_internal(<<Val:32/integer-signed-little,Rem/binary>>, primitive, s32, _Spec) -> {Val,Rem};
+decode_internal(<<Val:64/integer-signed-little,Rem/binary>>, primitive, s64, _Spec) -> {Val,Rem};
+decode_internal(<<1:8/integer-unsigned-little,Rem/binary>>, primitive, bool, _Spec) -> {true,Rem};
+decode_internal(<<0:8/integer-unsigned-little,Rem/binary>>, primitive, bool, _Spec) -> {false,Rem};
 
-decode_internal(Bin, synonym, RefName, Spec) -> decode(Bin, RefName, Spec);
+decode_internal(Bin, synonym, RefName, Spec) ->
+    {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
+    decode_internal(Bin, RefProto, RefName, Spec);
+
 decode_internal(Bin, vector, {RefName, MaxLen, Tag}, Spec) ->
-    {Length, Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
+    {Length, Rem} = decode_internal(Bin, primitive, tag_to_prim(Tag), Spec),
     true = Length =< MaxLen,
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
-                        {Val, NextRem} = decode(FoldRem, RefName, Spec),
+                        {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, Spec),
                         {NextRem, [Val|Acc]}
                 end, {Rem, []}, lists:seq(0, Length - 1)),
     {lists:reverse(Vals), FinalRem};
 decode_internal(Bin, array, {RefName, Length}, Spec) ->
+    {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
-                        {Val, NextRem} = decode(FoldRem, RefName, Spec),
+                        {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, Spec),
                         {NextRem, [Val|Acc]}
                 end, {Bin, []}, lists:seq(0, Length - 1)),
     {lists:reverse(Vals), FinalRem};
 decode_internal(Bin, range, {Offset, Length, Tag}, Spec) ->
-    {Value,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    {Value,Rem} = decode_internal(Bin, primitive, tag_to_prim(Tag), Spec),
     true = Value =< Length,
     {Value + Offset, Rem};
 decode_internal(Bin, enumeration, {Tag, States}, Spec) ->
-    {Index,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    {Index,Rem} = decode_internal(Bin, primitive, tag_to_prim(Tag), Spec),
     {Value, Index} = lists:keyfind(Index, 2, States),
     {Value, Rem};
 decode_internal(Bin, record, InstFields, Spec) ->
     {FinalBin, Vals} = lists:foldl(fun({data, FieldName, _, RefName}, {FoldBin, Acc}) ->
-                                           {Val,NextRem} = decode(FoldBin, RefName, Spec),
+                                           {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
+                                           {Val, NextRem} = decode_internal(FoldBin, RefProto, RefName, Spec),
                                            {NextRem,[{FieldName, Val}|Acc]}
                                    end, {Bin, []}, InstFields),
     {lists:reverse(Vals), FinalBin};
 decode_internal(Bin, union, {Tag, InstFields}, Spec) ->
-    {Index,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    {Index,Rem} = decode_internal(Bin, primitive, tag_to_prim(Tag), Spec),
     case lists:keyfind(Index, 3, InstFields) of
         {data, FieldName, Index, RefName} ->
-            {Value, FinalRem} = decode(Rem, RefName, Spec),
+            {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
+            {Value, FinalRem} = decode_internal(Rem, RefProto, RefName, Spec),
             {{FieldName, Value}, FinalRem};
         {empty, FieldName, Index} ->
             {FieldName, Rem}
     end;
 
 decode_internal(Bin, combination, {Tag, InstFields}, Spec) ->
-    {Flags,Rem} = decode(Bin, tag_to_prim(Tag), Spec),
+    {Flags,Rem} = decode_internal(Bin, primitive, tag_to_prim(Tag), Spec),
     FieldCount = length(InstFields),
     BitFlags = lists:reverse([ X || <<X:1>> <= <<Flags:FieldCount/integer-unsigned-little>> ]),
     {FinalRem, Values} = lists:foldl(fun({1, {empty, FieldName, _}}, {FoldBin,Acc}) ->
                                              {FoldBin, [FieldName|Acc]};
                                         ({1, {data, FieldName, _, RefName}}, {FoldBin,Acc}) ->
-                                             {Value, NextRem} = decode(FoldBin, RefName, Spec),
+                                             {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
+                                             {Value, NextRem} = decode_internal(FoldBin, RefProto, RefName, Spec),
                                              {NextRem, [{FieldName, Value}|Acc]};
                                         ({0, _}, Acc) -> Acc
                                      end, {Rem, []}, lists:zip(BitFlags, InstFields)),
@@ -164,10 +172,17 @@ tag_to_prim(tag32) -> u32;
 tag_to_prim(tag64) -> u64.
 
 
-lookup_type(u8, _Spec) -> {descriptor, primitive, u8, 1};
-lookup_type(u16, _Spec) -> {descriptor, primitive, u16, 2};
-lookup_type(u32, _Spec) -> {descriptor, primitive, u32, 4};
-lookup_type(u64, _Spec) -> {descriptor, primitive, u64, 8};
+lookup_type(u8, _Spec) -> {descriptor, primitive, u8, u8};
+lookup_type(u16, _Spec) -> {descriptor, primitive, u16, u16};
+lookup_type(u32, _Spec) -> {descriptor, primitive, u32, u32};
+lookup_type(u64, _Spec) -> {descriptor, primitive, u64, u64};
+lookup_type(s8, _Spec) -> {descriptor, primitive, s8, s8};
+lookup_type(s16, _Spec) -> {descriptor, primitive, s16, s16};
+lookup_type(s32, _Spec) -> {descriptor, primitive, s32, s32};
+lookup_type(s64, _Spec) -> {descriptor, primitive, s64, s64};
+lookup_type(f32, _Spec) -> {descriptor, primitive, f32, s32};
+lookup_type(f64, _Spec) -> {descriptor, primitive, f64, s64};
+lookup_type(bool, _Spec) -> {descriptor, primitive, bool, bool};
 lookup_type(Name, Spec) -> lists:keyfind(Name, 3, Spec).
 
 
