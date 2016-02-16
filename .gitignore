@@ -1,1 +1,6 @@
 .stack-work
+_build
+ebin
+*.swp
+*.swo
+test/erlang_test.erl

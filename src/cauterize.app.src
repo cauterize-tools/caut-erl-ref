@@ -1,0 +1,18 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ft=erlang sw=4 et
+{application, cauterize,
+ [
+  {description, "Cauterize decoder for Erlang"},
+  {vsn, "0.1.0"},
+  {modules,
+   [
+    cauterize
+   ]
+  },
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {registered, []}
+ ]
+}.
