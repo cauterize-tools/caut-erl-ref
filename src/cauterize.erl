@@ -3,6 +3,7 @@
 
 decode(Bin, Name, Spec) ->
     try decode_int(Bin, Name, Spec) of
+        {Decoded, Rem} -> {ok, Decoded, Rem};
         R -> {ok, R}
     catch
         throw:Reason ->
@@ -14,9 +15,9 @@ decode_int(Bin, Name, Spec) ->
     {Decoded,Rem} = decode_internal(Bin, Prototype, Name, Desc, Spec),
     case Rem of
         <<>> ->
-            {instance, Prototype, Name, Decoded};
+            [{Name, Decoded}];
         _ ->
-            {{instance, Prototype, Name, Decoded}, Rem}
+            {[{Name, Decoded}], Rem}
     end.
 
 decode_internal(<<Val:8/integer-unsigned-little,Rem/binary>>, primitive, _, u8, _Spec) -> {Val,Rem};
@@ -109,8 +110,9 @@ decode_tag(Bin, Tag, Spec) ->
     Prim = tag_to_prim(Tag),
     decode_internal(Bin, primitive, Prim, Prim, Spec).
 
-encode(Value, Spec) ->
-    try encode_int(Value, Spec) of
+encode([{TypeName, Value}], Spec) ->
+    {descriptor, Prototype, Name, Desc} = lookup_type(TypeName, Spec),
+    try encode_int({instance, Prototype, Name, Value}, Spec) of
         R -> {ok, list_to_binary(R)}
     catch
         throw:Reason ->
