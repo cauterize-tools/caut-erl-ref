@@ -20,13 +20,6 @@ decode_int(Bin, [Name|T], Acc, Spec) ->
     {descriptor, Prototype, Name, Desc} = lookup_type(Name, Spec),
     {Decoded,Rem} = decode_internal(Bin, Prototype, Name, Desc, Spec),
     decode_int(Rem, T, [{Name, Decoded}|Acc], Spec).
-    %case Rem of
-        %<<>> ->
-            %[{Name, Decoded}];
-        %_ when T /= [] ->
-            %{[{Name, Decoded}], Rem}
-            %{[{Name, Decoded}], Rem}
-    %end.
 
 decode_internal(<<>>, Type, Name, _, _) ->
   throw({unexpected_end_of_input, Type, Name});
