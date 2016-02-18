@@ -1,8 +1,10 @@
 -module(cauterize).
 -export([decode/3, encode/2]).
 
-decode(Bin, Name, Spec) ->
-    try decode_int(Bin, Name, Spec) of
+decode(Bin, Name, Spec) when is_atom(Name) ->
+    decode(Bin, [Name], Spec);
+decode(Bin, Names, Spec) ->
+    try decode_int(Bin, Names, [], Spec) of
         {Decoded, Rem} -> {ok, Decoded, Rem};
         R -> {ok, R}
     catch
@@ -10,16 +12,17 @@ decode(Bin, Name, Spec) ->
             {error, Reason}
     end.
 
-decode_int(Bin, Name, Spec) ->
+decode_int(<<>>, _, Acc, _) ->
+    lists:reverse(Acc);
+decode_int(Rem, [], Acc, _) ->
+    {lists:reverse(Acc), Rem};
+decode_int(Bin, [Name|T], Acc, Spec) ->
     {descriptor, Prototype, Name, Desc} = lookup_type(Name, Spec),
     {Decoded,Rem} = decode_internal(Bin, Prototype, Name, Desc, Spec),
-    case Rem of
-        <<>> ->
-            [{Name, Decoded}];
-        _ ->
-            {[{Name, Decoded}], Rem}
-    end.
+    decode_int(Rem, T, [{Name, Decoded}|Acc], Spec).
 
+decode_internal(<<>>, Type, Name, _, _) ->
+  throw({unexpected_end_of_input, Type, Name});
 decode_internal(<<Val:8/integer-unsigned-little,Rem/binary>>, primitive, _, u8, _Spec) -> {Val,Rem};
 decode_internal(<<Val:16/integer-unsigned-little,Rem/binary>>, primitive, _, u16, _Spec) -> {Val,Rem};
 decode_internal(<<Val:32/integer-unsigned-little,Rem/binary>>, primitive, _, u32, _Spec) -> {Val,Rem};
@@ -110,14 +113,17 @@ decode_tag(Bin, Tag, Spec) ->
     Prim = tag_to_prim(Tag),
     decode_internal(Bin, primitive, Prim, Prim, Spec).
 
-encode([{TypeName, Value}], Spec) ->
-    {descriptor, Prototype, Name, Desc} = lookup_type(TypeName, Spec),
-    try encode_int({instance, Prototype, Name, Value}, Spec) of
-        R -> {ok, list_to_binary(R)}
+encode([{_TypeName, _Value}|_T]=List, Spec) ->
+    try [encode(TypeName, Value, Spec) || {TypeName, Value} <- List] of
+        R -> {ok, R}
     catch
         throw:Reason ->
             {error, Reason}
     end.
+
+encode(TypeName, Value, Spec) ->
+    {descriptor, Prototype, Name, Desc} = lookup_type(TypeName, Spec),
+    encode_int({instance, Prototype, Name, Value}, Spec).
 
 encode_int({instance, primitive, u8, Value}, _Spec) ->
     <<Value:8/integer-unsigned-little>>;
@@ -252,7 +258,12 @@ lookup_type(s64, _Spec) -> {descriptor, primitive, s64, s64};
 lookup_type(f32, _Spec) -> {descriptor, primitive, f32, f32};
 lookup_type(f64, _Spec) -> {descriptor, primitive, f64, f64};
 lookup_type(bool, _Spec) -> {descriptor, primitive, bool, bool};
-lookup_type(Name, Spec) -> lists:keyfind(Name, 3, Spec).
+lookup_type(Name, Spec) ->
+    case lists:keyfind(Name, 3, Spec) of
+        false ->
+            throw({unknown_type, Name});
+        R -> R
+    end.
 
 lookup_type(Name, Type, Spec) ->
     case lookup_type(Name, Spec) of

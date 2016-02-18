@@ -30,3 +30,28 @@
                (field b s8)
                (field c a_union)
                (empty d)))
+(type someenum enumeration
+      (values
+        red
+        green
+        blue))
+(type primitivetest union
+      (fields
+        (field u8 u8)
+        (field u16 u16)
+        (field u32 u32)
+        (field u64 u64)
+        (field s8 s8)
+        (field s16 s16)
+        (field s32 s32)
+        (field s64 s64)
+        (field bool bool)
+        (field f32 f32)
+        (field f64 f64)))
+(type some_range range 1000 1010)
+(type field_enum enumeration
+      (values
+        somearray
+        somevector
+        arecord))
+(type header vector field_enum 4)
