@@ -1,6 +1,51 @@
 -module(cauterize).
 -export([decode/3, encode/2]).
 
+-type cauterize_tag() :: tag8 | tag16 | tag32 | tag64.
+-type cauterize_primitive() :: u8 | u16 | u32 | u64 | s8 | s16 | s32 | s64 | f32 | f64 | bool.
+-type cauterize_type() :: cauterize_primitive() | 'range' | 'array' | 'vector' | 'enumeration' | 'record' | 'union' | 'combination'.
+
+-type cauterize_synonym() :: {'descriptor', 'synonym', Name :: atom(), Type :: cauterize_type()}.
+-type cauterize_enumeration() :: {'descriptor', 'enumeration', Name :: atom(), {Tag :: cauterize_tag(), [{Field:: atom(), Index :: non_neg_integer()}, ...]}}.
+-type cauterize_range() :: {'descriptor', 'range', Name :: atom(), {Min :: integer(), Max :: integer(), Tag :: cauterize_tag()}}.
+-type cauterize_union() :: {'descriptor', 'union', Name :: atom(), {Tag :: cauterize_tag(), [{'data', FieldName :: atom(), Index :: non_neg_integer(), FieldType :: atom()} | {'empty', FieldName :: atom(), Index :: non_neg_integer()}, ...]}}.
+-type cauterize_combination() :: {'descriptor', 'combination', Name :: atom(), {Tag :: cauterize_tag(), [{'data', FieldName :: atom(), Index :: non_neg_integer(), FieldType :: atom()} | {'empty', FieldName :: atom(), Index :: non_neg_integer()}, ...]}}.
+-type cauterize_array() :: {'descriptor', 'array', Name :: atom(), { Type :: atom(), Length :: pos_integer()}}.
+-type cauterize_vector() :: {'descriptor', 'vector', Name :: atom(), { Type :: atom(), MaxLength :: pos_integer(), Tag :: cauterize_tag()}}.
+-type cauterize_record() :: {'descriptor', 'record', Name :: atom(), [{'data', FieldName :: atom(), Index :: non_neg_integer(), Type :: atom()}, ...]}.
+
+-type cauterize_spec() :: list(
+                        cauterize_synonym() |
+                        cauterize_enumeration() |
+                        cauterize_range() |
+                        cauterize_union() |
+                        cauterize_array() |
+                        cauterize_vector() |
+                        cauterize_record() |
+                        cauterize_combination()).
+
+-type decode_reason() :: {'unexpected_end_of_input', Type :: atom(), Name :: atom(), Remainder :: binary()} |
+                         {'oversize_vector', Name :: atom(), Length :: pos_integer(), MaxLen :: pos_integer()} |
+                         {'invalid_range_value', Name :: atom(), Value :: any(), Length :: pos_integer()} |
+                         {'out_of_range_enumeration_value', Name :: atom(), Index :: non_neg_integer()} |
+                         {'bad_union_index', Name :: atom(), Index :: non_neg_integer()}.
+
+-type encode_reason() :: {'oversize_vector', Name :: atom(), Size :: pos_integer(), MaxSize :: pos_integer()} |
+                         {'incorrect_array_size', Name :: atom(), non_neg_integer(), Size :: pos_integer()} |
+                         {'invalid_range_value', Name :: atom(), Value :: non_neg_integer()} |
+                         {'unknown_enumeration_field', Name :: atom(), Field :: atom()} |
+                         {'missing_record_field', Name :: atom(), Field :: atom()} |
+                         {'unknown_union_member', Name :: atom(), Field :: atom()} |
+                         {'data_supplied_for_empty_union_member', Name :: atom(), Field :: atom()}.
+
+-type decode_stack() :: [] | [{TypeName :: atom(), [{FieldName :: atom(), Value :: any()}]}].
+
+-type decode_result() :: {'ok', any()} | {'ok', any(), binary()} | {'error', {decode_reason(), decode_stack()}}.
+-type encode_result() :: {'ok', binary()} | {'error', encode_reason()}.
+
+-export_type([encode_result/0, decode_result/0]).
+
+-spec decode(Bin :: binary(), Name :: atom() | [atom(),...], Spec :: cauterize_spec()) -> decode_result().
 decode(<<>>, _, _) ->
     {error, {no_input, []}};
 decode(Bin, Name, Spec) when is_atom(Name) ->
@@ -102,7 +147,11 @@ decode_internal(Bin, vector, Name, {RefName, MaxLen, Tag}, Spec, _Stack) ->
                         {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec, [lists:reverse(Acc)|_Stack]),
                         {NextRem, [Val|Acc]}
                 end, {Rem, []}, lists:seq(0, Length - 1)),
-    {lists:reverse(Vals), FinalRem};
+    Res = case RefName of
+              char -> list_to_binary(lists:reverse(Vals));
+              _ -> lists:reverse(Vals)
+          end,
+    {Res, FinalRem};
 decode_internal(Bin, array, _Name, {RefName, Length}, Spec, _Stack) ->
     {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
@@ -163,6 +212,7 @@ decode_tag(Bin, Tag, Spec, _Stack) ->
     Prim = tag_to_prim(Tag),
     decode_internal(Bin, primitive, Prim, Prim, Spec, _Stack).
 
+-spec encode([{TypeName :: atom(), Value :: any()}, ...], Spec :: cauterize_spec()) -> encode_result().
 encode([{_TypeName, _Value}|_T]=List, Spec) ->
     try [encode(TypeName, Value, Spec) || {TypeName, Value} <- List] of
         R -> {ok, R}
@@ -176,6 +226,8 @@ encode(TypeName, Value, Spec) ->
     encode_int({instance, Prototype, Name, Value}, Spec).
 
 encode_int({instance, primitive, u8, Value}, _Spec) ->
+    <<Value:8/integer-unsigned-little>>;
+encode_int({instance, primitive, char, Value}, _Spec) ->
     <<Value:8/integer-unsigned-little>>;
 encode_int({instance, primitive, u16, Value}, _Spec) ->
     <<Value:16/integer-unsigned-little>>;
@@ -219,6 +271,9 @@ encode_int({instance, vector, Name, Values}, Spec) when is_list(Values) ->
     [encode_int({instance, primitive, tag_to_prim(Tag), length(Values)}, Spec)|
      [encode_int({instance, Prototype, RefName, V}, Spec)||V <- Values]];
 
+encode_int({instance, vector, Name, Values}, Spec) when is_binary(Values) ->
+    encode_int({instance, vector, Name, binary_to_list(Values)}, Spec);
+
 encode_int({instance, array, Name, Values}, Spec) when is_list(Values) ->
     {descriptor, array, Name, {RefName, Size}} = lookup_type(Name, array, Spec),
     case length(Values) /= Size of
@@ -254,7 +309,7 @@ encode_int({instance, record, Name, InstFields}, Spec) ->
     RecData = lists:foldl(fun({data, FieldName, _, RefName}, Acc) ->
                                   {FieldName, Value} = case lists:keyfind(FieldName, 1, InstFields) of
                                                            false ->
-                                                               throw({missing_record_field, FieldName, Name});
+                                                               throw({missing_record_field, Name, FieldName});
                                                            R -> R
                                                        end,
                                   {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
@@ -266,11 +321,11 @@ encode_int({instance, union, Name, [{FieldName, Value}]}, Spec) when is_atom(Fie
     {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, union, Spec),
     case lists:keyfind(FieldName, 2, Fields) of
         false ->
-            throw({unknown_union_member, FieldName, Name});
+            throw({unknown_union_member, Name, FieldName});
         {empty, FieldName, Index} when Value == true ->
             [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
         {empty, FieldName, _Index} ->
-            throw({data_supplied_for_empty_union_member, FieldName, Name});
+            throw({data_supplied_for_empty_union_member, Name, FieldName});
         {data, FieldName, Index, RefName} ->
             {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
             [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec),
@@ -314,6 +369,7 @@ lookup_type(s64, _Spec) -> {descriptor, primitive, s64, s64};
 lookup_type(f32, _Spec) -> {descriptor, primitive, f32, f32};
 lookup_type(f64, _Spec) -> {descriptor, primitive, f64, f64};
 lookup_type(bool, _Spec) -> {descriptor, primitive, bool, bool};
+lookup_type(char, _Spec) -> {descriptor, primitive, char, u8};
 lookup_type(Name, Spec) ->
     case lists:keyfind(Name, 3, Spec) of
         false ->

@@ -131,12 +131,12 @@ decode_test_() ->
     end},
     {"union unknown field", fun() ->
         I0= [{a_union, [{f, 1}]}],
-        ?assertMatch({error, {unknown_union_member, f, a_union}}, erlang_test:encode(I0)),
+        ?assertMatch({error, {unknown_union_member, a_union, f}}, erlang_test:encode(I0)),
         ok
     end},
     {"union unknown field", fun() ->
         I0= [{a_union, [{e, 1}]}],
-        ?assertMatch({error, {data_supplied_for_empty_union_member, e, a_union}}, erlang_test:encode(I0)),
+        ?assertMatch({error, {data_supplied_for_empty_union_member, a_union, e}}, erlang_test:encode(I0)),
         ok
     end}
     ].
@@ -160,7 +160,7 @@ encode_test_() ->
     end},
      {"invalid record field", fun() ->
         I0 = [{arecord, [{z, [10, 11, 12, 13]}, {d, [{a, 2}, {d, [{a, 3}, {b, 1}]}]}]}],
-        ?assertMatch({error, {missing_record_field, a, arecord}}, erlang_test:encode(I0)),
+        ?assertMatch({error, {missing_record_field, arecord, a}}, erlang_test:encode(I0)),
         ok
     end}
     ].
