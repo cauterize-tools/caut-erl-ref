@@ -58,7 +58,11 @@ decode_internal(Bin, vector, Name, {RefName, MaxLen, Tag}, Spec) ->
                         {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec),
                         {NextRem, [Val|Acc]}
                 end, {Rem, []}, lists:seq(0, Length - 1)),
-    {lists:reverse(Vals), FinalRem};
+    Res = case RefName of
+              char -> list_to_binary(lists:reverse(Vals));
+              _ -> lists:reverse(Vals)
+          end,
+    {Res, FinalRem};
 decode_internal(Bin, array, _Name, {RefName, Length}, Spec) ->
     {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
@@ -127,6 +131,8 @@ encode(TypeName, Value, Spec) ->
 
 encode_int({instance, primitive, u8, Value}, _Spec) ->
     <<Value:8/integer-unsigned-little>>;
+encode_int({instance, primitive, char, Value}, _Spec) ->
+    <<Value:8/integer-unsigned-little>>;
 encode_int({instance, primitive, u16, Value}, _Spec) ->
     <<Value:16/integer-unsigned-little>>;
 encode_int({instance, primitive, u32, Value}, _Spec) ->
@@ -168,6 +174,9 @@ encode_int({instance, vector, Name, Values}, Spec) when is_list(Values) ->
     {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
     [encode_int({instance, primitive, tag_to_prim(Tag), length(Values)}, Spec)|
      [encode_int({instance, Prototype, RefName, V}, Spec)||V <- Values]];
+
+encode_int({instance, vector, Name, Values}, Spec) when is_binary(Values) ->
+    encode_int({instance, vector, Name, binary_to_list(Values)}, Spec);
 
 encode_int({instance, array, Name, Values}, Spec) when is_list(Values) ->
     {descriptor, array, Name, {RefName, Size}} = lookup_type(Name, array, Spec),
@@ -258,6 +267,7 @@ lookup_type(s64, _Spec) -> {descriptor, primitive, s64, s64};
 lookup_type(f32, _Spec) -> {descriptor, primitive, f32, f32};
 lookup_type(f64, _Spec) -> {descriptor, primitive, f64, f64};
 lookup_type(bool, _Spec) -> {descriptor, primitive, bool, bool};
+lookup_type(char, _Spec) -> {descriptor, primitive, char, u8};
 lookup_type(Name, Spec) ->
     case lists:keyfind(Name, 3, Spec) of
         false ->
