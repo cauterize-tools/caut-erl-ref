@@ -92,7 +92,9 @@ decode_internal(Bin, union, _Name, {Tag, InstFields}, Spec) ->
             {Value, FinalRem} = decode_internal(Rem, RefProto, RefName, _Desc, Spec),
             {{FieldName, Value}, FinalRem};
         {empty, FieldName, Index} ->
-            {FieldName, Rem}
+            {FieldName, Rem};
+        false ->
+            throw({bad_union_index, _Name, Index})
     end;
 
 decode_internal(Bin, combination, _Name, {Tag, InstFields}, Spec) ->
