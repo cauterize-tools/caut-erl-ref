@@ -75,7 +75,11 @@ decode_internal(Bin, range, Name, {Offset, Length, Tag}, Spec) ->
     {Value + Offset, Rem};
 decode_internal(Bin, enumeration, _Name, {Tag, States}, Spec) ->
     {Index, Rem} = decode_tag(Bin, Tag, Spec),
-    {Value, Index} = lists:keyfind(Index, 2, States),
+    {Value, Index} = case lists:keyfind(Index, 2, States) of
+                         false ->
+                             throw({out_of_range_enumeration_value, _Name, Index});
+                         R -> R
+                     end,
     {Value, Rem};
 decode_internal(Bin, record, _Name, InstFields, Spec) ->
     {FinalBin, Vals} = lists:foldl(fun({data, FieldName, _, RefName}, {FoldBin, Acc}) ->
@@ -124,7 +128,7 @@ encode([{_TypeName, _Value}|_T]=List, Spec) ->
     end.
 
 encode(TypeName, Value, Spec) ->
-    {descriptor, Prototype, Name, Desc} = lookup_type(TypeName, Spec),
+    {descriptor, Prototype, Name, _Desc} = lookup_type(TypeName, Spec),
     encode_int({instance, Prototype, Name, Value}, Spec).
 
 encode_int({instance, primitive, u8, Value}, _Spec) ->
@@ -194,7 +198,11 @@ encode_int({instance, range, Name, Value}, Spec) when is_integer(Value) ->
 
 encode_int({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
     {descriptor, enumeration, Name, {Tag, States}} = lookup_type(Name, enumeration, Spec),
-    {Value, Index} = lists:keyfind(Value, 1, States),
+    {Value, Index} = case lists:keyfind(Value, 1, States) of
+                         false ->
+                             throw({unknown_enumeration_field, Value, Name});
+                         R -> R
+                     end,
     [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
 
 encode_int({instance, record, Name, InstFields}, Spec) ->
@@ -212,14 +220,24 @@ encode_int({instance, record, Name, InstFields}, Spec) ->
 
 encode_int({instance, union, Name, {FieldName, Value}}, Spec) when is_atom(FieldName) ->
     {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, union, Spec),
-    {data, FieldName, Index, RefName} = lists:keyfind(FieldName, 2, Fields),
+    {data, FieldName, Index, RefName} = case lists:keyfind(FieldName, 2, Fields) of
+                                            false ->
+                                                throw({unknown_union_member, FieldName, Name});
+                                            R -> R
+                                        end,
     {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
     [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec),
      encode_int({instance, Prototype, RefName, Value}, Spec)];
 
 encode_int({instance, union, Name, FieldName}, Spec) when is_atom(FieldName) ->
     {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, union, Spec),
-    {empty, FieldName, Index} = lists:keyfind(FieldName, 2, Fields),
+    {empty, FieldName, Index} = case lists:keyfind(FieldName, 2, Fields) of
+                                    false ->
+                                        throw({unknown_union_member, FieldName, Name});
+                                    {data, _FieldName, _Index, _RefName} ->
+                                        throw({data_supplied_for_empty_union_member, FieldName, Name});
+                                    R -> R
+                                end,
     [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
 
 encode_int({instance, combination, Name, InstFields}, Spec) ->
