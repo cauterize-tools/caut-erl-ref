@@ -29,6 +29,9 @@ roundtrip_test() ->
     I7 = [{some_range, 1005}],
     {ok, O7} = erlang_test:encode(I7),
     ?assertEqual({ok, I7}, erlang_test:decode(list_to_binary(O7), some_range)),
+    I8 = [{arecord, [{z, [10, 11, 12, 13]}, {a, -1}, {d, [{a, 1}, {d, [{a, 0}, {b, 1}]}]}]}],
+    {ok, O8} = erlang_test:encode(I8),
+    ?assertEqual({ok, I8}, erlang_test:decode(binary:part(list_to_binary(O8), {0, 32}), arecord)),
     ok.
 
 primitive_test_() ->
