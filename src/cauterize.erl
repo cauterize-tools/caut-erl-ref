@@ -1,6 +1,8 @@
 -module(cauterize).
 -export([decode/3, encode/2]).
 
+decode(<<>>, _, _) ->
+	{error, no_input, []};
 decode(Bin, Name, Spec) when is_atom(Name) ->
     decode(Bin, [Name], Spec);
 decode(Bin, Names, Spec) ->
@@ -8,9 +10,50 @@ decode(Bin, Names, Spec) ->
         {Decoded, Rem} -> {ok, Decoded, Rem};
         R -> {ok, R}
     catch
-        throw:Reason ->
-            {error, Reason}
+        throw:{Reason, [TopType|[Stack]]} ->
+            {error, Reason, [{TopType, fixup_stacktrace(Stack)}]};
+        throw:{Reason, [TopType|Stack]} ->
+						R = fixup_stacktrace(Stack),
+            {error, Reason, [{TopType, lists:flatten(R)}]}
+
     end.
+
+fixup_stacktrace([]) -> [];
+fixup_stacktrace(X) when is_list(X) ->
+	replace(lists:reverse(fixup_stacktrace_int(lists:reverse(X))), '?');
+fixup_stacktrace(X) ->
+	replace(X, '?').
+
+fixup_stacktrace_int([A]) ->
+	[replace(A, '?')];
+fixup_stacktrace_int([A,B|C]) ->
+	case last(B) of
+		'__duct_tape__' ->
+			fixup_stacktrace_int([replace(B, fixup_stacktrace(A))|C]);
+			_ ->
+				R = fixup_stacktrace_int([B|C]),
+				[A|R]
+	end;
+fixup_stacktrace_int(X) ->
+	X.
+
+last(X) when is_list(X) ->
+	last(lists:last(X));
+last(X) when is_tuple(X) ->
+	last(element(tuple_size(X), X));
+last(X) ->
+	X.
+
+replace(X, Rep) when is_list(X) ->
+	R = lists:droplast(X) ++ [replace(lists:last(X), Rep)],
+	R;
+replace(X, Rep) when is_tuple(X) ->
+	R = setelement(tuple_size(X), X, replace(element(tuple_size(X), X), Rep)),
+	R;
+replace('__duct_tape__', Rep) ->
+	Rep;
+replace(X, _Rep) ->
+	X.
 
 decode_int(<<>>, _, Acc, _) ->
     lists:reverse(Acc);
@@ -22,7 +65,7 @@ decode_int(Bin, [Name|T], Acc, Spec) ->
     decode_int(Rem, T, [{Name, Decoded}|Acc], Spec).
 
 decode_internal(<<>>, Type, Name, _, _, Stack) ->
-  throw({unexpected_end_of_input, Type, Name, lists:reverse(Stack)});
+  throw({{unexpected_end_of_input, Type, Name, <<>>}, lists:reverse(Stack)});
 decode_internal(<<Val:8/integer-unsigned-little,Rem/binary>>, primitive, _, u8, _Spec, _Stack) -> {Val,Rem};
 decode_internal(<<Val:16/integer-unsigned-little,Rem/binary>>, primitive, _, u16, _Spec, _Stack) -> {Val,Rem};
 decode_internal(<<Val:32/integer-unsigned-little,Rem/binary>>, primitive, _, u32, _Spec, _Stack) -> {Val,Rem};
@@ -42,35 +85,35 @@ decode_internal(<<0,0,0,0,0,0,240,127,Rem/binary>>, primitive, _, f64, _Spec, _S
 decode_internal(<<0,0,0,0,0,0,240,255,Rem/binary>>, primitive, _, f64, _Spec, _Stack) -> {neg_inf,Rem};
 decode_internal(<<0,0,0,0,0,0,248,255,Rem/binary>>, primitive, _, f64, _Spec, _Stack) -> {nan,Rem};
 decode_internal(<<Value:64/float-unsigned-little,Rem/binary>>, primitive, _, f64, _Spec, _Stack) -> {Value,Rem};
-decode_internal(Bin, primitive, _, Name, _Spec, _Stack) -> throw({incomplete_primitive, Name, Bin, lists:reverse(_Stack)});
+decode_internal(Bin, primitive, _, Name, _Spec, _Stack) -> throw({{unexpected_end_of_input, primitive, Name, Bin}, lists:reverse(_Stack)});
 
 decode_internal(Bin, synonym, _Name, RefName, Spec, _Stack) ->
     {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
-    decode_internal(Bin, RefProto, RefName, _Desc, Spec, [_Stack]);
+    decode_internal(Bin, RefProto, RefName, _Desc, Spec, _Stack);
 
 decode_internal(Bin, vector, Name, {RefName, MaxLen, Tag}, Spec, _Stack) ->
     {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
     {Length, Rem} = decode_tag(Bin, Tag, Spec, _Stack),
     case Length > MaxLen of
-        true -> throw({oversize_vector, Name, Length, MaxLen, lists:reverse(_Stack)});
+        true -> throw({{oversize_vector, Name, Length, MaxLen}, lists:reverse(_Stack)});
         _ -> ok
     end,
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
-                        {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec, [Acc|_Stack]),
+                        {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec, [lists:reverse(Acc)|_Stack]),
                         {NextRem, [Val|Acc]}
                 end, {Rem, []}, lists:seq(0, Length - 1)),
     {lists:reverse(Vals), FinalRem};
 decode_internal(Bin, array, _Name, {RefName, Length}, Spec, _Stack) ->
     {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
     {FinalRem, Vals} = lists:foldl(fun(_, {FoldRem, Acc}) ->
-                        {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec, [Acc|_Stack]),
+                        {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec, [lists:reverse(Acc)|_Stack]),
                         {NextRem, [Val|Acc]}
                 end, {Bin, []}, lists:seq(0, Length - 1)),
     {lists:reverse(Vals), FinalRem};
 decode_internal(Bin, range, Name, {Offset, Length, Tag}, Spec, _Stack) ->
     {Value, Rem} = decode_tag(Bin, Tag, Spec, _Stack),
     case Value > Length of
-        true -> throw({invalid_range_value, Name, Value, Length, lists:reverse(_Stack)});
+        true -> throw({{invalid_range_value, Name, Value, Length}, lists:reverse(_Stack)});
         _ -> ok
     end,
     {Value + Offset, Rem};
@@ -78,14 +121,14 @@ decode_internal(Bin, enumeration, _Name, {Tag, States}, Spec, _Stack) ->
     {Index, Rem} = decode_tag(Bin, Tag, Spec, _Stack),
     {Value, Index} = case lists:keyfind(Index, 2, States) of
                          false ->
-                             throw({out_of_range_enumeration_value, _Name, Index, lists:reverse(_Stack)});
+                             throw({{out_of_range_enumeration_value, _Name, Index}, lists:reverse(_Stack)});
                          R -> R
                      end,
     {Value, Rem};
 decode_internal(Bin, record, _Name, InstFields, Spec, _Stack) ->
     {FinalBin, Vals} = lists:foldl(fun({data, FieldName, _, RefName}, {FoldBin, Acc}) ->
                                            {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
-                                           {Val, NextRem} = decode_internal(FoldBin, RefProto, RefName, _Desc, Spec, [Acc,FieldName|_Stack]),
+                                           {Val, NextRem} = decode_internal(FoldBin, RefProto, RefName, _Desc, Spec, [lists:reverse([{FieldName, '__duct_tape__'}|Acc])|_Stack]),
                                            {NextRem,[{FieldName, Val}|Acc]}
                                    end, {Bin, []}, InstFields),
     {lists:reverse(Vals), FinalBin};
@@ -94,12 +137,12 @@ decode_internal(Bin, union, _Name, {Tag, InstFields}, Spec, _Stack) ->
     case lists:keyfind(Index, 3, InstFields) of
         {data, FieldName, Index, RefName} ->
             {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
-            {Value, FinalRem} = decode_internal(Rem, RefProto, RefName, _Desc, Spec, [FieldName|_Stack]),
+            {Value, FinalRem} = decode_internal(Rem, RefProto, RefName, _Desc, Spec, [{FieldName, '__duct_tape__'}|_Stack]),
             {{FieldName, Value}, FinalRem};
         {empty, FieldName, Index} ->
             {FieldName, Rem};
         false ->
-            throw({bad_union_index, _Name, Index, lists:reverse(_Stack)})
+            throw({{bad_union_index, _Name, Index}, lists:reverse(_Stack)})
     end;
 
 decode_internal(Bin, combination, _Name, {Tag, InstFields}, Spec, _Stack) ->
@@ -110,7 +153,7 @@ decode_internal(Bin, combination, _Name, {Tag, InstFields}, Spec, _Stack) ->
                                              {FoldBin, [FieldName|Acc]};
                                         ({1, {data, FieldName, _, RefName}}, {FoldBin,Acc}) ->
                                              {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
-                                             {Value, NextRem} = decode_internal(FoldBin, RefProto, RefName, _Desc, Spec, [Acc|_Stack]),
+                                             {Value, NextRem} = decode_internal(FoldBin, RefProto, RefName, _Desc, Spec, [lists:reverse([{FieldName, '__duct_tape__'}|Acc])|_Stack]),
                                              {NextRem, [{FieldName, Value}|Acc]};
                                         ({0, _}, Acc) -> Acc
                                      end, {Rem, []}, lists:zip(BitFlags, InstFields)),
