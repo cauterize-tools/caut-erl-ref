@@ -40,23 +40,23 @@ truncate(B, I) ->
 truncation_test_() ->
     [
      {"somearray truncation", fun() ->
-        ?assertMatch({error, no_input, []}, erlang_test:decode(<<>> , somearray)),
+        ?assertMatch({error, {no_input, []}}, erlang_test:decode(<<>> , somearray)),
         ok
     end},
      {"somearray truncation", fun() ->
         I0 = [{somearray, [1, 2, 3, 4, 5, 6, 7, 8]}],
         {ok, O0} = erlang_test:encode(I0),
         C = list_to_binary(O0),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{somearray, [1, 2, 3, 4, 5, 6, 7]}]}, erlang_test:decode(truncate(C, 8), somearray)),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{somearray, [1, 2, 3, 4, 5, 6]}]}, erlang_test:decode(truncate(C, 9), somearray)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{somearray, [1, 2, 3, 4, 5, 6, 7]}]}}, erlang_test:decode(truncate(C, 8), somearray)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{somearray, [1, 2, 3, 4, 5, 6]}]}}, erlang_test:decode(truncate(C, 9), somearray)),
         ok
     end},
      {"somevector truncation", fun() ->
         I0 = [{somevector, [1, 2, 3, 4, 5]}],
         {ok, O0} = erlang_test:encode(I0),
         C = list_to_binary(O0),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{somevector, [1, 2, 3, 4]}]}, erlang_test:decode(truncate(C, 7), somevector)),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{somevector, [1, 2, 3, 4]}]}, erlang_test:decode(truncate(C, 8), somevector)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{somevector, [1, 2, 3, 4]}]}}, erlang_test:decode(truncate(C, 7), somevector)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{somevector, [1, 2, 3, 4]}]}}, erlang_test:decode(truncate(C, 8), somevector)),
         ok
     end},
      {"oversize vector", fun() ->
@@ -64,28 +64,28 @@ truncation_test_() ->
         {ok, O0} = erlang_test:encode(I0),
         <<5:8/integer, C0/binary>> = list_to_binary(O0),
         C = <<10:8/integer, C0/binary, 6:64/integer-signed-little, 7:64/integer-signed-little, 8:64/integer-signed-little, 9:64/integer-signed-little, 10:64/integer-signed-little>>,
-        ?assertMatch({error, {oversize_vector, somevector, 10, 8}, [{somevector, []}]}, erlang_test:decode(C, somevector)),
+        ?assertMatch({error, {{oversize_vector, somevector, 10, 8}, [{somevector, []}]}}, erlang_test:decode(C, somevector)),
         ok
     end},
     {"someenum invalid value", fun() ->
-        ?assertMatch({error, {out_of_range_enumeration_value, someenum, 9}, [{someenum, [] }]}, erlang_test:decode(<<9>>, someenum)),
+        ?assertMatch({error, {{out_of_range_enumeration_value, someenum, 9}, [{someenum, [] }]}}, erlang_test:decode(<<9>>, someenum)),
         ok
     end},
     {"union truncation", fun() ->
         I0= [{a_union, {d, 223372036854775808}}],
         {ok, O0} = erlang_test:encode(I0),
         C = list_to_binary(O0),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{a_union, {d,'?'} }]}, erlang_test:decode(truncate(C, 1), a_union)),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{a_union, {d, '?'} }]}, erlang_test:decode(truncate(C, 8), a_union)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_union, {d,'?'} }]}}, erlang_test:decode(truncate(C, 1), a_union)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_union, {d, '?'} }]}}, erlang_test:decode(truncate(C, 8), a_union)),
         ok
     end},
     {"record truncation", fun() ->
         I0 = [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, [{a, 2}, {d, [{a, 3}, {b, 1}]}]}]}],
         {ok, O0} = erlang_test:encode(I0),
         C = list_to_binary(O0),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, [{a, 2}, {d, [{a, 3}, {b, '?'}]}]}]}]}, erlang_test:decode(truncate(C, 1), arecord)),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, [{a, 2}, {d, '?'}]}]}]}, erlang_test:decode(truncate(C, 2), arecord)),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, '?'}]}]}, erlang_test:decode(truncate(C, 3), arecord)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, [{a, 2}, {d, [{a, 3}, {b, '?'}]}]}]}]}}, erlang_test:decode(truncate(C, 1), arecord)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, [{a, 2}, {d, '?'}]}]}]}}, erlang_test:decode(truncate(C, 2), arecord)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{arecord, [{z, [10, 11, 12, 13]}, {a, 1}, {d, '?'}]}]}}, erlang_test:decode(truncate(C, 3), arecord)),
         ok
     end},
     {"oversize vector in record", fun() ->
@@ -93,15 +93,15 @@ truncation_test_() ->
         {ok, O0} = erlang_test:encode(I0),
         <<4:8/integer, C0/binary>> = list_to_binary(O0),
         C = <<10:8/integer, C0/binary>>,
-        ?assertMatch({error, {oversize_vector, _, _, _}, [{arecord, [{z, '?'}]}]}, erlang_test:decode(C, arecord)),
+        ?assertMatch({error, {{oversize_vector, _, _, _}, [{arecord, [{z, '?'}]}]}}, erlang_test:decode(C, arecord)),
         ok
     end},
     {"combination truncation", fun() ->
         I0 = [{a_combination, [{a, 223372036854775808}, {b, -99}, d]}],
         {ok, O0} = erlang_test:encode(I0),
         C = list_to_binary(O0),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{a_combination, [{a, 223372036854775808}, {b, '?'}]}]}, erlang_test:decode(truncate(C, 1), a_combination)),
-        ?assertMatch({error, {unexpected_end_of_input, _, _, _}, [{a_combination, [{a, '?'}]}]}, erlang_test:decode(truncate(C, 2), a_combination)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_combination, [{a, 223372036854775808}, {b, '?'}]}]}}, erlang_test:decode(truncate(C, 1), a_combination)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_combination, [{a, '?'}]}]}}, erlang_test:decode(truncate(C, 2), a_combination)),
         ok
     end}
     ].

@@ -2,7 +2,7 @@
 -export([decode/3, encode/2]).
 
 decode(<<>>, _, _) ->
-	{error, no_input, []};
+	{error, {no_input, []}};
 decode(Bin, Name, Spec) when is_atom(Name) ->
     decode(Bin, [Name], Spec);
 decode(Bin, Names, Spec) ->
@@ -11,10 +11,10 @@ decode(Bin, Names, Spec) ->
         R -> {ok, R}
     catch
         throw:{Reason, [TopType|[Stack]]} ->
-            {error, Reason, [{TopType, fixup_stacktrace(Stack)}]};
+            {error, {Reason, [{TopType, fixup_stacktrace(Stack)}]}};
         throw:{Reason, [TopType|Stack]} ->
 						R = fixup_stacktrace(Stack),
-            {error, Reason, [{TopType, lists:flatten(R)}]}
+            {error, {Reason, [{TopType, lists:flatten(R)}]}}
 
     end.
 
