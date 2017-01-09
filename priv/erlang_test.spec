@@ -1,6 +1,6 @@
 (name "erlang_test")
 (version "0.0.1")
-(fingerprint 8f21a22d41a8a0f428d12b052b205163abae5962)
+(fingerprint 43a81c33f4ace23fe0431dbd941203021de9195a)
 (size 1 80)
 (depth 6)
 (typelength 2)
@@ -23,12 +23,12 @@
 (type 
   some_range
   range
-  (fingerprint fcf6c28dc7717d6180b5b980f6c7e3a3c7221550)
-  (size 1 1)
+  (fingerprint d829f56fd4ee577222e9da4282f632581cee336d)
+  (size 2 2)
   (depth 1)
   1000
-  1010
-  t1
+  2010
+  t2
   u16)
 (type 
   primitivetest

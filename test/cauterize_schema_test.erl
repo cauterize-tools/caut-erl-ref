@@ -14,15 +14,21 @@ roundtrip_test() ->
     I2 = [{arecord, [{z, [10, 11, 12, 13]}, {a, -1}, {d, [{a, 1}, {d, [{a, 0}, {b, 1}]}]}]}],
     {ok, O2} = erlang_test:encode(I2),
     ?assertEqual({ok, I2}, erlang_test:decode(list_to_binary(O2), arecord)),
-    I3 = [{a_union, {c, 99}}],
+    I3 = [{a_union, [{c, 99}]}],
     {ok, O3} = erlang_test:encode(I3),
     ?assertEqual({ok, I3}, erlang_test:decode(list_to_binary(O3), a_union)),
-    I4 = [{a_union, e}],
+    I4 = [{a_union, [{e, true}]}],
     {ok, O4} = erlang_test:encode(I4),
     ?assertEqual({ok, I4}, erlang_test:decode(list_to_binary(O4), a_union)),
     I5 = [{a_combination, [{a, 223372036854775808}, {b, -99}, d]}],
     {ok, O5} = erlang_test:encode(I5),
     ?assertEqual({ok, I5}, erlang_test:decode(list_to_binary(O5), a_combination)),
+    I5a = [{a_combination, [{a, 223372036854775808}, {b, -99}]}],
+    {ok, O5a} = erlang_test:encode(I5a),
+    ?assertEqual({ok, I5a}, erlang_test:decode(list_to_binary(O5a), a_combination)),
+    I5b = [{a_combination, [{a, 223372036854775808}, {b, -99}, {c, [{a,[{z, [10, 11, 12, 13]}, {a, -1}, {d, [{a, 1}, {d, [{a, 0}, {b, 1}]}]}]}] }]}],
+    {ok, O5b} = erlang_test:encode(I5b),
+    ?assertEqual({ok, I5b}, erlang_test:decode(list_to_binary(O5b), a_combination)),
     I6 = [{someenum, green}],
     {ok, O6} = erlang_test:encode(I6),
     ?assertEqual({ok, I6}, erlang_test:decode(list_to_binary(O6), someenum)),
@@ -31,13 +37,12 @@ roundtrip_test() ->
     ?assertEqual({ok, I7}, erlang_test:decode(list_to_binary(O7), some_range)),
     I8 = [{somearray, [1, 2, 3, 4, 5, 6, 7]}],
     ?assertEqual({error, {incorrect_array_size, somearray, 7, 8}}, erlang_test:encode(I8)),
-
     ok.
 
 truncate(B, I) ->
     binary:part(B, {0, byte_size(B) - I}).
 
-truncation_test_() ->
+decode_test_() ->
     [
      {"somearray truncation", fun() ->
         ?assertMatch({error, {no_input, []}}, erlang_test:decode(<<>> , somearray)),
@@ -49,6 +54,18 @@ truncation_test_() ->
         C = list_to_binary(O0),
         ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{somearray, [1, 2, 3, 4, 5, 6, 7]}]}}, erlang_test:decode(truncate(C, 8), somearray)),
         ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{somearray, [1, 2, 3, 4, 5, 6]}]}}, erlang_test:decode(truncate(C, 9), somearray)),
+        ok
+    end},
+     {"range truncation", fun() ->
+        I0 = [{some_range, 1005}],
+        {ok, O0} = erlang_test:encode(I0),
+        C = list_to_binary(O0),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{some_range, []}]}}, erlang_test:decode(truncate(C, 1), some_range)),
+        ok
+    end},
+     {"invalid range value", fun() ->
+        C = <<2011:16/integer-unsigned-little>>,
+        ?assertMatch({error, {{invalid_range_value, _, _, _}, [{some_range, []}]}}, erlang_test:decode(C, some_range)),
         ok
     end},
      {"somevector truncation", fun() ->
@@ -72,11 +89,19 @@ truncation_test_() ->
         ok
     end},
     {"union truncation", fun() ->
-        I0= [{a_union, {d, 223372036854775808}}],
+        I0= [{a_union, [{d, 223372036854775808}]}],
         {ok, O0} = erlang_test:encode(I0),
         C = list_to_binary(O0),
-        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_union, {d,'?'} }]}}, erlang_test:decode(truncate(C, 1), a_union)),
-        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_union, {d, '?'} }]}}, erlang_test:decode(truncate(C, 8), a_union)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_union, [{d,'?'}] }]}}, erlang_test:decode(truncate(C, 1), a_union)),
+        ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_union, [{d, '?'}] }]}}, erlang_test:decode(truncate(C, 8), a_union)),
+        ok
+    end},
+    {"union bad index", fun() ->
+        I0= [{a_union, [{d, 223372036854775808}]}],
+        {ok, O0} = erlang_test:encode(I0),
+        <<3:8/integer, C0/binary>> = list_to_binary(O0),
+        C = <<10:8/integer, C0/binary>>,
+        ?assertMatch({error, {{bad_union_index, _, _}, [{a_union, []}]}}, erlang_test:decode(truncate(C, 1), a_union)),
         ok
     end},
     {"record truncation", fun() ->
@@ -103,6 +128,40 @@ truncation_test_() ->
         ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_combination, [{a, 223372036854775808}, {b, '?'}]}]}}, erlang_test:decode(truncate(C, 1), a_combination)),
         ?assertMatch({error, {{unexpected_end_of_input, _, _, _}, [{a_combination, [{a, '?'}]}]}}, erlang_test:decode(truncate(C, 2), a_combination)),
         ok
+    end},
+    {"union unknown field", fun() ->
+        I0= [{a_union, [{f, 1}]}],
+        ?assertMatch({error, {unknown_union_member, f, a_union}}, erlang_test:encode(I0)),
+        ok
+    end},
+    {"union unknown field", fun() ->
+        I0= [{a_union, [{e, 1}]}],
+        ?assertMatch({error, {data_supplied_for_empty_union_member, e, a_union}}, erlang_test:encode(I0)),
+        ok
+    end}
+    ].
+
+encode_test_() ->
+    [
+     {"oversize vector", fun() ->
+        I0 = [{somevector, lists:seq(1, 20)}],
+        ?assertMatch({error, {oversize_vector, somevector, 20, 8}}, erlang_test:encode(I0)),
+        ok
+    end},
+     {"out-of-range range value", fun() ->
+        I1 = [{some_range, 2011}],
+        ?assertMatch({error, {invalid_range_value, some_range, 2011}}, erlang_test:encode(I1)),
+        ok
+    end},
+     {"invalid enum value", fun() ->
+        I1 = [{someenum, purple}],
+        ?assertMatch({error, {unknown_enumeration_field, someenum, purple}}, erlang_test:encode(I1)),
+        ok
+    end},
+     {"invalid record field", fun() ->
+        I0 = [{arecord, [{z, [10, 11, 12, 13]}, {d, [{a, 2}, {d, [{a, 3}, {b, 1}]}]}]}],
+        ?assertMatch({error, {missing_record_field, a, arecord}}, erlang_test:encode(I0)),
+        ok
     end}
     ].
 
@@ -110,82 +169,82 @@ truncation_test_() ->
 primitive_test_() ->
     [
        {"u8", fun() ->
-         I = [{primitivetest, {u8, 255}}],
+         I = [{primitivetest, [{u8, 255}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"u16", fun() ->
-         I = [{primitivetest, {u16, 65535}}],
+         I = [{primitivetest, [{u16, 65535}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"u32", fun() ->
-         I = [{primitivetest, {u32, 4294967295}}],
+         I = [{primitivetest, [{u32, 4294967295}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"u64", fun() ->
-         I = [{primitivetest, {u64, 18446744073709551615}}],
+         I = [{primitivetest, [{u64, 18446744073709551615}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"s16", fun() ->
-         I = [{primitivetest, {s16, 32767}}],
+         I = [{primitivetest, [{s16, 32767}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"s32", fun() ->
-         I = [{primitivetest, {s32, 2147483647}}],
+         I = [{primitivetest, [{s32, 2147483647}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"true", fun() ->
-         I = [{primitivetest, {bool, true}}],
+         I = [{primitivetest, [{bool, true}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"false", fun() ->
-         I = [{primitivetest, {bool, false}}],
+         I = [{primitivetest, [{bool, false}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f32 nan", fun() ->
-         I = [{primitivetest, {f32, nan}}],
+         I = [{primitivetest, [{f32, nan}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f32 pos_inf", fun() ->
-         I = [{primitivetest, {f32, pos_inf}}],
+         I = [{primitivetest, [{f32, pos_inf}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f32 neg_inf", fun() ->
-         I = [{primitivetest, {f32, neg_inf}}],
+         I = [{primitivetest, [{f32, neg_inf}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f32", fun() ->
-         I = [{primitivetest, {f32, 3.1449999809265137}}],
+         I = [{primitivetest, [{f32, 3.1449999809265137}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f64 nan", fun() ->
-         I = [{primitivetest, {f64, nan}}],
+         I = [{primitivetest, [{f64, nan}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f64 pos_inf", fun() ->
-         I = [{primitivetest, {f64, pos_inf}}],
+         I = [{primitivetest, [{f64, pos_inf}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f64 neg_inf", fun() ->
-         I = [{primitivetest, {f64, neg_inf}}],
+         I = [{primitivetest, [{f64, neg_inf}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end},
        {"f64", fun() ->
-         I = [{primitivetest, {f64, 3.142857142857143}}],
+         I = [{primitivetest, [{f64, 3.142857142857143}]}],
          {ok, O} = erlang_test:encode(I),
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end}].

@@ -48,7 +48,7 @@
         (field bool bool)
         (field f32 f32)
         (field f64 f64)))
-(type some_range range 1000 1010)
+(type some_range range 1000 2010)
 (type field_enum enumeration
       (values
         somearray

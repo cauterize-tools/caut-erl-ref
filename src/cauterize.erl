@@ -2,7 +2,7 @@
 -export([decode/3, encode/2]).
 
 decode(<<>>, _, _) ->
-	{error, {no_input, []}};
+    {error, {no_input, []}};
 decode(Bin, Name, Spec) when is_atom(Name) ->
     decode(Bin, [Name], Spec);
 decode(Bin, Names, Spec) ->
@@ -13,47 +13,47 @@ decode(Bin, Names, Spec) ->
         throw:{Reason, [TopType|[Stack]]} ->
             {error, {Reason, [{TopType, fixup_stacktrace(Stack)}]}};
         throw:{Reason, [TopType|Stack]} ->
-						R = fixup_stacktrace(Stack),
+            R = fixup_stacktrace(Stack),
             {error, {Reason, [{TopType, lists:flatten(R)}]}}
 
     end.
 
 fixup_stacktrace([]) -> [];
 fixup_stacktrace(X) when is_list(X) ->
-	replace(lists:reverse(fixup_stacktrace_int(lists:reverse(X))), '?');
+    replace(lists:reverse(fixup_stacktrace_int(lists:reverse(X))), '?');
 fixup_stacktrace(X) ->
-	replace(X, '?').
+    replace(X, '?').
 
 fixup_stacktrace_int([A]) ->
-	[replace(A, '?')];
+    [replace(A, '?')];
 fixup_stacktrace_int([A,B|C]) ->
-	case last(B) of
-		'__duct_tape__' ->
-			fixup_stacktrace_int([replace(B, fixup_stacktrace(A))|C]);
-			_ ->
-				R = fixup_stacktrace_int([B|C]),
-				[A|R]
-	end;
+    case last(B) of
+      '__duct_tape__' ->
+            fixup_stacktrace_int([replace(B, fixup_stacktrace(A))|C]);
+        _ ->
+            R = fixup_stacktrace_int([B|C]),
+            [A|R]
+    end;
 fixup_stacktrace_int(X) ->
-	X.
+    X.
 
 last(X) when is_list(X) ->
-	last(lists:last(X));
+    last(lists:last(X));
 last(X) when is_tuple(X) ->
-	last(element(tuple_size(X), X));
+    last(element(tuple_size(X), X));
 last(X) ->
-	X.
+    X.
 
 replace(X, Rep) when is_list(X) ->
-	R = lists:droplast(X) ++ [replace(lists:last(X), Rep)],
-	R;
+    R = lists:droplast(X) ++ [replace(lists:last(X), Rep)],
+    R;
 replace(X, Rep) when is_tuple(X) ->
-	R = setelement(tuple_size(X), X, replace(element(tuple_size(X), X), Rep)),
-	R;
+    R = setelement(tuple_size(X), X, replace(element(tuple_size(X), X), Rep)),
+    R;
 replace('__duct_tape__', Rep) ->
-	Rep;
+    Rep;
 replace(X, _Rep) ->
-	X.
+    X.
 
 decode_int(<<>>, _, Acc, _) ->
     lists:reverse(Acc);
@@ -137,10 +137,10 @@ decode_internal(Bin, union, _Name, {Tag, InstFields}, Spec, _Stack) ->
     case lists:keyfind(Index, 3, InstFields) of
         {data, FieldName, Index, RefName} ->
             {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
-            {Value, FinalRem} = decode_internal(Rem, RefProto, RefName, _Desc, Spec, [{FieldName, '__duct_tape__'}|_Stack]),
-            {{FieldName, Value}, FinalRem};
+            {Value, FinalRem} = decode_internal(Rem, RefProto, RefName, _Desc, Spec, [[{FieldName, '__duct_tape__'}]|_Stack]),
+            {[{FieldName, Value}], FinalRem};
         {empty, FieldName, Index} ->
-            {FieldName, Rem};
+            {[{FieldName, true}], Rem};
         false ->
             throw({{bad_union_index, _Name, Index}, lists:reverse(_Stack)})
     end;
@@ -244,7 +244,7 @@ encode_int({instance, enumeration, Name, Value}, Spec) when is_atom(Value) ->
     {descriptor, enumeration, Name, {Tag, States}} = lookup_type(Name, enumeration, Spec),
     {Value, Index} = case lists:keyfind(Value, 1, States) of
                          false ->
-                             throw({unknown_enumeration_field, Value, Name});
+                             throw({unknown_enumeration_field, Name, Value});
                          R -> R
                      end,
     [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
@@ -262,28 +262,20 @@ encode_int({instance, record, Name, InstFields}, Spec) ->
                 end, [], DescFields),
     lists:reverse(RecData);
 
-encode_int({instance, union, Name, {FieldName, Value}}, Spec) when is_atom(FieldName) ->
+encode_int({instance, union, Name, [{FieldName, Value}]}, Spec) when is_atom(FieldName) ->
     {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, union, Spec),
-    {data, FieldName, Index, RefName} = case lists:keyfind(FieldName, 2, Fields) of
-                                            false ->
-                                                throw({unknown_union_member, FieldName, Name});
-                                            R -> R
-                                        end,
-    {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
-    [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec),
-     encode_int({instance, Prototype, RefName, Value}, Spec)];
-
-encode_int({instance, union, Name, FieldName}, Spec) when is_atom(FieldName) ->
-    {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, union, Spec),
-    {empty, FieldName, Index} = case lists:keyfind(FieldName, 2, Fields) of
-                                    false ->
-                                        throw({unknown_union_member, FieldName, Name});
-                                    {data, _FieldName, _Index, _RefName} ->
-                                        throw({data_supplied_for_empty_union_member, FieldName, Name});
-                                    R -> R
-                                end,
-    [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
-
+    case lists:keyfind(FieldName, 2, Fields) of
+        false ->
+            throw({unknown_union_member, FieldName, Name});
+        {empty, FieldName, Index} when Value == true ->
+            [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
+        {empty, FieldName, Index} ->
+            throw({data_supplied_for_empty_union_member, FieldName, Name});
+        {data, FieldName, Index, RefName} ->
+            {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
+            [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec),
+             encode_int({instance, Prototype, RefName, Value}, Spec)]
+    end;
 encode_int({instance, combination, Name, InstFields}, Spec) ->
     {descriptor, combination, Name, {Tag, DescFields}} = lookup_type(Name, combination, Spec),
     {BitTag,RecData} = lists:foldl(fun({data, FieldName, Index, RefName}, {BitField,Acc}) ->
