@@ -269,7 +269,7 @@ encode_int({instance, union, Name, [{FieldName, Value}]}, Spec) when is_atom(Fie
             throw({unknown_union_member, FieldName, Name});
         {empty, FieldName, Index} when Value == true ->
             [encode_int({instance, primitive, tag_to_prim(Tag), Index}, Spec)];
-        {empty, FieldName, Index} ->
+        {empty, FieldName, _Index} ->
             throw({data_supplied_for_empty_union_member, FieldName, Name});
         {data, FieldName, Index, RefName} ->
             {descriptor, Prototype, RefName, _Desc} = lookup_type(RefName, Spec),
