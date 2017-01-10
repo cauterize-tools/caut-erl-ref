@@ -158,7 +158,11 @@ decode_internal(Bin, array, _Name, {RefName, Length}, Spec, _Stack) ->
                         {Val, NextRem} = decode_internal(FoldRem, RefProto, RefName, _Desc, Spec, [lists:reverse(Acc)|_Stack]),
                         {NextRem, [Val|Acc]}
                 end, {Bin, []}, lists:seq(0, Length - 1)),
-    {lists:reverse(Vals), FinalRem};
+    Res = case RefName of
+              char -> list_to_binary(lists:reverse(Vals));
+              _ -> lists:reverse(Vals)
+          end,
+    {Res, FinalRem};
 decode_internal(Bin, range, Name, {Offset, Length, Tag}, Spec, _Stack) ->
     {Value, Rem} = decode_tag(Bin, Tag, Spec, _Stack),
     case Value > Length of

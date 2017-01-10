@@ -249,6 +249,25 @@ primitive_test_() ->
          ?assertEqual({ok, I}, erlang_test:decode(list_to_binary(O), primitivetest))
         end}].
 
+char_vector_test() ->
+    I0 = [{charvector, [$h, $e, $l, $l, $o]}],
+    {ok, O0} = cauterize:encode(I0, [{descriptor, vector, charvector, { u8, 10, tag8 }}]),
+    I1 = [{charvector, [$h, $e, $l, $l, $o]}],
+    ?assertEqual({ok, O0}, cauterize:encode(I1, [{descriptor, vector, charvector, { char, 10, tag8}}])),
+    ?assertEqual({ok, I0}, cauterize:decode(list_to_binary(O0), charvector, [{descriptor, vector, charvector, { u8, 10, tag8 }}])),
+    ?assertEqual({ok, [{charvector, <<"hello">>}]}, cauterize:decode(list_to_binary(O0), charvector, [{descriptor, vector, charvector, { char, 10, tag8 }}])),
+    ok.
+
+
+char_array_test() ->
+    I0 = [{chararray, [$h, $e, $l, $l, $o, $w, $o, $r, $l, $d]}],
+    {ok, O0} = cauterize:encode(I0, [{descriptor, array, chararray, { u8, 10 }}]),
+    I1 = [{chararray, [$h, $e, $l, $l, $o, $w, $o, $r, $l, $d]}],
+    ?assertEqual({ok, O0}, cauterize:encode(I1, [{descriptor, array, chararray, { char, 10 }}])),
+    ?assertEqual({ok, I0}, cauterize:decode(list_to_binary(O0), chararray, [{descriptor, array, chararray, { u8, 10 }}])),
+    ?assertEqual({ok, [{chararray, <<"helloworld">>}]}, cauterize:decode(list_to_binary(O0), chararray, [{descriptor, array, chararray, { char, 10 }}])),
+    ok.
+
 coalesce_test() ->
     I0 = [{somearray, [1, 2, 3, 4, 5, 6, 7, 8]}],
     {ok, O0} = erlang_test:encode(I0),
