@@ -378,14 +378,10 @@ lookup_type(Name, Spec) ->
     end.
 
 lookup_type(Name, Type, Spec) ->
-    case lookup_type(Name, Spec) of
-        false ->
-          throw({unknown_type, Name});
-        R ->
-            case element(2, R) of
-                Type ->
-                    R;
-                OtherType ->
-                    throw({type_mismatch, Name, Type, OtherType})
-            end
+    R = lookup_type(Name, Spec),
+    case element(2, R) of
+        Type ->
+            R;
+        OtherType ->
+            throw({type_mismatch, Name, Type, OtherType})
     end.

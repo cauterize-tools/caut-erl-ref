@@ -14,7 +14,7 @@ test: eunit crucible
 eunit: generate
 	./rebar3 do eunit --dir=test, cover
 
-generate: test/erlang_test.erl
+generate:
 	stack exec caut-erl-ref -- -s priv/erlang_test.spec -o test
 
 crucible:
