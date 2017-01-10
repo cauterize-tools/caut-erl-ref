@@ -197,14 +197,14 @@ decode_internal(Bin, union, _Name, {Tag, InstFields}, Spec, _Stack) ->
 decode_internal(Bin, combination, _Name, {Tag, InstFields}, Spec, _Stack) ->
     {Flags, Rem} = decode_tag(Bin, Tag, Spec, _Stack),
     FieldCount = length(InstFields),
-    BitFlags = lists:reverse([ X || <<X:1>> <= <<Flags:FieldCount/integer-unsigned-little>> ]),
-    {FinalRem, Values} = lists:foldl(fun({1, {empty, FieldName, _}}, {FoldBin,Acc}) ->
+    BitFlags = [ ( Flags band trunc(math:pow(2, X))) > 0 || X <- lists:seq(0, FieldCount - 1) ],
+    {FinalRem, Values} = lists:foldl(fun({true, {empty, FieldName, _}}, {FoldBin,Acc}) ->
                                              {FoldBin, [FieldName|Acc]};
-                                        ({1, {data, FieldName, _, RefName}}, {FoldBin,Acc}) ->
+                                        ({true, {data, FieldName, _, RefName}}, {FoldBin,Acc}) ->
                                              {descriptor, RefProto, RefName, _Desc} = lookup_type(RefName, Spec),
                                              {Value, NextRem} = decode_internal(FoldBin, RefProto, RefName, _Desc, Spec, [lists:reverse([{FieldName, '__duct_tape__'}|Acc])|_Stack]),
                                              {NextRem, [{FieldName, Value}|Acc]};
-                                        ({0, _}, Acc) -> Acc
+                                        ({false, _}, Acc) -> Acc
                                      end, {Rem, []}, lists:zip(BitFlags, InstFields)),
     {lists:reverse(Values), FinalRem}.
 
