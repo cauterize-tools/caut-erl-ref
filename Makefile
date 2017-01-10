@@ -1,4 +1,4 @@
-.PHONY: compile cover test
+.PHONY: compile cover test crucible
 
 all: compile
 
@@ -9,10 +9,13 @@ compile:
 cover: test
 	./rebar3 cover
 
-test: eunit
+test: eunit crucible
 
-eunit:
+eunit: generate
 	./rebar3 do eunit --dir=test, cover
 
-generate:
+generate: test/erlang_test.erl
 	stack exec caut-erl-ref -- -s priv/erlang_test.spec -o test
+
+crucible:
+	./run_crucible.sh
