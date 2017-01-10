@@ -5,21 +5,29 @@ module Cauterize.ErlangRef.Generate
 
 import qualified Cauterize.CommonTypes as C
 import qualified Cauterize.Specification as S
+import qualified Cauterize.Hash as H
 
 import Data.List (intercalate)
 import Data.Text (unpack)
 import Data.String.Interpolate
 import Data.String.Interpolate.Util
+import Numeric (showHex)
 
 erlFileFromSpec :: S.Specification -> String
 erlFileFromSpec s = unindent [i|
 -module(#{ln}).
--export([decode/2, encode/1]).
+-export([decode/2, encode/1, fingerprints/0, tag_size/0, max_size/0]).
 
 %% specification for Cauterize schema #{ln}
 
 -define(CAUT_SPEC_#{ln}, [
 #{descriptorList}
+]).
+
+-define(CAUT_SPEC_#{ln}_tag_size, #{sts}).
+-define(CAUT_SPEC_#{ln}_max_size, #{sms}).
+-define(CAUT_SPEC_#{ln}_fp_lookup, [
+#{typeFps}
 ]).
 
 -spec decode(Bin :: binary(), Which :: atom()) -> cauterize:decode_result().
@@ -29,11 +37,31 @@ decode(Bin, Which) ->
 -spec encode([{TypeName :: atom(), Value :: any()}, ...]) -> cauterize:encode_result().
 encode(Inst) ->
   cauterize:encode(Inst, ?CAUT_SPEC_#{ln}).
+
+-spec fingerprints() -> [{Type :: atom(), Fingerprint :: binary()},...].
+fingerprints() ->
+  ?CAUT_SPEC_#{ln}_fp_lookup.
+
+-spec tag_size() -> pos_integer().
+tag_size() ->
+  ?CAUT_SPEC_#{ln}_tag_size.
+
+-spec max_size() -> pos_integer().
+max_size() ->
+  ?CAUT_SPEC_#{ln}_max_size.
 |]
   where
     ln = unpack (S.specName s)
     types = S.specTypes s
+    sts = S.specTypeLength s
+    sms = C.sizeMax . S.specSize $ s
     descriptorList = intercalate ",\n" $ map descriptor types
+    typeFps = intercalate ",\n" $ map fingerprint types
+    fingerprint t =
+      let n = ident2str ident
+          ident = S.typeName t
+          fp = formatFp (S.typeFingerprint t)
+      in [i|  {#{n}, <<#{fp}>>}|]
 
 descriptor t =
   let n = ident2str ident
@@ -41,6 +69,16 @@ descriptor t =
       tps = typeToPrimString t
       typeDesc = typeDescToString (S.typeDesc t)
   in [i|  {descriptor, #{tps}, #{n}, #{typeDesc}}|]
+
+
+formatFp :: H.Hash -> String
+formatFp f =
+  let bs = H.hashToBytes f
+      showByte n = case showHex n "" of
+                     [a] -> ['1', '6', '#', '0', a]
+                     [a,b] -> ['1', '6', '#', a, b]
+                     _ -> error "formatFp: should be impossible"
+  in intercalate "," (map showByte bs)
 
 ident2str :: C.Identifier -> String
 ident2str = unpack . C.unIdentifier
