@@ -22,8 +22,11 @@ erlFileFromSpec s = unindent [i|
 #{descriptorList}
 ]).
 
+-spec decode(Bin :: binary(), Which :: atom()) -> cauterize:decode_result().
 decode(Bin, Which) ->
   cauterize:decode(Bin, Which, ?CAUT_SPEC_#{ln}).
+
+-spec encode([{TypeName :: atom(), Value :: any()}, ...]) -> cauterize:encode_result().
 encode(Inst) ->
   cauterize:encode(Inst, ?CAUT_SPEC_#{ln}).
 |]
