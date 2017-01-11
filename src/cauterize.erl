@@ -321,6 +321,12 @@ encode_int({instance, record, Name, InstFields}, Spec) ->
                 end, [], DescFields),
     lists:reverse(RecData);
 
+encode_int({instance, union, Name, FieldName}, Spec) when is_atom(FieldName) ->
+    %% turn it into KVC form
+    encode_int({instance, union, Name, [{FieldName, true}]}, Spec);
+encode_int({instance, union, Name, {FieldName, Value}}, Spec) when is_atom(FieldName) ->
+    %% turn it into KVC form
+    encode_int({instance, union, Name, [{FieldName, Value}]}, Spec);
 encode_int({instance, union, Name, [{FieldName, Value}]}, Spec) when is_atom(FieldName) ->
     {descriptor, union, Name, {Tag, Fields}} = lookup_type(Name, union, Spec),
     case lists:keyfind(FieldName, 2, Fields) of

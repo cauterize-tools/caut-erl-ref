@@ -17,9 +17,24 @@ roundtrip_test() ->
     I3 = [{a_union, [{c, 99}]}],
     {ok, O3} = erlang_test:encode(I3),
     ?assertEqual({ok, I3}, erlang_test:decode(list_to_binary(O3), a_union)),
+    %% non-KVC form
+    I3a = [{a_union, {c, 99}}],
+    {ok, O3a} = erlang_test:encode(I3a),
+    %% decodes to KVC form
+    ?assertEqual({ok, I3}, erlang_test:decode(list_to_binary(O3a), a_union)),
     I4 = [{a_union, [{e, true}]}],
     {ok, O4} = erlang_test:encode(I4),
     ?assertEqual({ok, I4}, erlang_test:decode(list_to_binary(O4), a_union)),
+    %% non-KVC form
+    I4a = [{a_union, e}],
+    {ok, O4a} = erlang_test:encode(I4a),
+    %% decodes to KVC form
+    ?assertEqual({ok, I4}, erlang_test:decode(list_to_binary(O4a), a_union)),
+    %% non-KVC form
+    I4b = [{a_union, {e, true}}],
+    {ok, O4b} = erlang_test:encode(I4b),
+    %% decodes to KVC form
+    ?assertEqual({ok, I4}, erlang_test:decode(list_to_binary(O4b), a_union)),
     I5 = [{a_combination, [{a, 223372036854775808}, {b, -99}, d]}],
     {ok, O5} = erlang_test:encode(I5),
     ?assertEqual({ok, I5}, erlang_test:decode(list_to_binary(O5), a_combination)),
@@ -252,7 +267,7 @@ primitive_test_() ->
 char_vector_test() ->
     I0 = [{charvector, [$h, $e, $l, $l, $o]}],
     {ok, O0} = cauterize:encode(I0, [{descriptor, vector, charvector, { u8, 10, tag8 }}]),
-    I1 = [{charvector, [$h, $e, $l, $l, $o]}],
+    I1 = [{charvector, <<"hello">>}],
     ?assertEqual({ok, O0}, cauterize:encode(I1, [{descriptor, vector, charvector, { char, 10, tag8}}])),
     ?assertEqual({ok, I0}, cauterize:decode(list_to_binary(O0), charvector, [{descriptor, vector, charvector, { u8, 10, tag8 }}])),
     ?assertEqual({ok, [{charvector, <<"hello">>}]}, cauterize:decode(list_to_binary(O0), charvector, [{descriptor, vector, charvector, { char, 10, tag8 }}])),
@@ -262,8 +277,7 @@ char_vector_test() ->
 char_array_test() ->
     I0 = [{chararray, [$h, $e, $l, $l, $o, $w, $o, $r, $l, $d]}],
     {ok, O0} = cauterize:encode(I0, [{descriptor, array, chararray, { u8, 10 }}]),
-    I1 = [{chararray, [$h, $e, $l, $l, $o, $w, $o, $r, $l, $d]}],
-    ?assertEqual({ok, O0}, cauterize:encode(I1, [{descriptor, array, chararray, { char, 10 }}])),
+    ?assertEqual({ok, O0}, cauterize:encode(I0, [{descriptor, array, chararray, { char, 10 }}])),
     ?assertEqual({ok, I0}, cauterize:decode(list_to_binary(O0), chararray, [{descriptor, array, chararray, { u8, 10 }}])),
     ?assertEqual({ok, [{chararray, <<"helloworld">>}]}, cauterize:decode(list_to_binary(O0), chararray, [{descriptor, array, chararray, { char, 10 }}])),
     ok.
