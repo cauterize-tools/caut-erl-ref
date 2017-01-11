@@ -73,7 +73,23 @@ Given a [Cauterize Union](https://github.com/cauterize-tools/cauterize/blob/mast
 [{request, [{set_key, [{name, "power"}, {value, 9001}]}]}]
 ```
 
-Unions have what seems like a superflous list wrapping the 2-tuple, but it needed to make KVC traversal work.
+Empty fields are considered to be 'true':
+
+```erlang
+[{request, [{get_key, true}]}]
+```
+
+Unions have what seems like a superflous list wrapping the 2-tuple, but it needed to make KVC traversal work. This gets inconvienent for encoding though, so shorthand forms are supported:
+
+```erlang
+[{request, {set_key, [{name, "power"}, {value, 9001}]}}]
+
+[{request, {get_key, true}}]
+[{request, get_key}]
+```
+
+Note that `decode` will always return the KVC form, because it makes it much easier to traverse the structure of complicated specifications.
+
 ## Combination
 
 Given a [Cauterize Combination](https://github.com/cauterize-tools/cauterize/blob/master/README.md#combination) like this, you can construct an instance of it in Erlang like this:
@@ -82,10 +98,37 @@ Given a [Cauterize Combination](https://github.com/cauterize-tools/cauterize/blo
 [{sensed, [{ambient_temp, 24}, {air_pressure, 5000}]}]
 ```
 
-## Further Examples
+# Extensions
+
+## char vectors/arrays
+
+If you edit the generated Erlang module to change the primitive type of a vector or an array from `u8` to `char`, they will decode as binaries, not lists of u8s. This can sometimes be handy.
+
+# Key value coding
+
+erl-caut-ref tries very hard to use key-value coded structures to make it easy to access the fields without cumbersome pattern matching and destructuring code. KVC can help here:
+
+```erlang
+1> X = [{a_combination, [{a, 223372036854775808}, {b, -99}, {c, [{a,[{z, [10, 11, 12, 13]}, {a, -1}, {d, [{a, 1}, {d, [{a, 0}, {b, 1}]}]}]}] }]}].
+[{a_combination,[{a,223372036854775808},
+                 {b,-99},
+                 {c,[{a,[{z,"\n\v\f\r"},
+                         {a,-1},
+                         {d,[{a,1},{d,[{a,0},{b,1}]}]}]}]}]}]
+2> kvc:path([a_combination, a], X).
+223372036854775808
+3> kvc:path([a_combination, c, a], X).
+[{z,"\n\v\f\r"},{a,-1},{d,[{a,1},{d,[{a,0},{b,1}]}]}]
+4> kvc:path([a_combination, c, a, d, d, b], X).
+1
+```
+
+KVC is sort of like a lite version of XPATH or something.
+
+# Further Examples
 
 To see some more elaborate encoding/decoding examples, take a look at `test/cauterize_schema_test.erl`.
 
-## Errors
+# Errors
 
-When an encode or a decode fail, you will get back an `{error, Reason}` tuple. This will contain information about which field failed to encode/decode, why it failed and, for decode only, a stack of the elements decoded up to the point the failure occured. This can be helpful when you want to understand what a truncated Cauterize structure is, but given Cauterize's lack of self-description, this may be misleading if the beginning of the structure is corrupted or missing.
+When an encode or a decode fails, you will get back an `{error, Reason}` tuple. This will contain information about which field failed to encode/decode, why it failed and, for decode only, a stack of the elements decoded up to the point the failure occured. This can be helpful when you want to understand what a truncated Cauterize structure is, but given Cauterize's lack of self-description, this may be misleading if the beginning of the structure is corrupted or missing.
