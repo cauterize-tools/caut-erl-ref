@@ -230,23 +230,76 @@ encode(TypeName, Value, Spec) ->
     encode_int({instance, Prototype, Name, Value}, Spec).
 
 encode_int({instance, primitive, u8, Value}, _Spec) ->
-    <<Value:8/integer-unsigned-little>>;
+    case Value bsr 8 of
+        0 ->
+            <<Value:8/integer-unsigned-little>>;
+        _ ->
+            throw({integer_too_large, u8, Value})
+    end;
 encode_int({instance, primitive, char, Value}, _Spec) ->
-    <<Value:8/integer-unsigned-little>>;
+    case Value bsr 8 of
+        0 ->
+            <<Value:8/integer-unsigned-little>>;
+        _ ->
+            throw({integer_too_large, char, Value})
+    end;
 encode_int({instance, primitive, u16, Value}, _Spec) ->
-    <<Value:16/integer-unsigned-little>>;
+    case Value bsr 16 of
+        0 ->
+            <<Value:16/integer-unsigned-little>>;
+        _ ->
+            throw({integer_too_large, u16, Value})
+    end;
 encode_int({instance, primitive, u32, Value}, _Spec) ->
-    <<Value:32/integer-unsigned-little>>;
+    case Value bsr 32 of
+        0 ->
+            <<Value:32/integer-unsigned-little>>;
+        _ ->
+            throw({integer_too_large, u32, Value})
+    end;
 encode_int({instance, primitive, u64, Value}, _Spec) ->
-    <<Value:64/integer-unsigned-little>>;
+    case Value bsr 64 of
+        0 ->
+            <<Value:64/integer-unsigned-little>>;
+        _ ->
+            throw({integer_too_large, u64, Value})
+    end;
 encode_int({instance, primitive, s8, Value}, _Spec) ->
-    <<Value:8/integer-signed-little>>;
+    case Value bsr 7 of
+        0 when Value >= 0 ->
+            <<Value:8/integer-signed-little>>;
+        -1 when  Value < 0 ->
+            <<Value:8/integer-signed-little>>;
+        _ ->
+            throw({integer_too_large, s8, Value})
+    end;
 encode_int({instance, primitive, s16, Value}, _Spec) ->
-    <<Value:16/integer-signed-little>>;
+    case Value bsr 15 of
+        0 when Value >= 0 ->
+            <<Value:16/integer-signed-little>>;
+        -1 when  Value < 0 ->
+            <<Value:16/integer-signed-little>>;
+        _ ->
+            throw({integer_too_large, s16, Value})
+    end;
 encode_int({instance, primitive, s32, Value}, _Spec) ->
-    <<Value:32/integer-signed-little>>;
+    case Value bsr 31 of
+        0 when Value >= 0 ->
+            <<Value:32/integer-signed-little>>;
+        -1 when  Value < 0 ->
+            <<Value:32/integer-signed-little>>;
+        _ ->
+            throw({integer_too_large, s32, Value})
+    end;
 encode_int({instance, primitive, s64, Value}, _Spec) ->
-    <<Value:64/integer-signed-little>>;
+    case Value bsr 63 of
+        0 when Value >= 0 ->
+            <<Value:64/integer-signed-little>>;
+        -1 when  Value < 0 ->
+            <<Value:64/integer-signed-little>>;
+        _ ->
+            throw({integer_too_large, s64, Value})
+    end;
 encode_int({instance, primitive, bool, true}, _Spec) ->
     <<1:8/integer-unsigned-little>>;
 encode_int({instance, primitive, bool, false}, _Spec) ->
